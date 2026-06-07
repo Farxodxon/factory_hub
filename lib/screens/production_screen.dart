@@ -20,7 +20,7 @@ class _ProductionScreenState extends State<ProductionScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final result = await FactoryHubApi.getProductionReport(period: 'month');
+    final result = await FactoryHubApi.getProductionReport('month');
     setState(() {
       _data = result;
       _batches = (result['batches'] as List?) ?? [];

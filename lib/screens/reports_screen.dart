@@ -23,7 +23,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     setState(() => _loading = true);
     final stock = await FactoryHubApi.getStockReport();
     final forecast = await FactoryHubApi.getForecastReport();
-    final production = await FactoryHubApi.getProductionReport();
+    final production = await FactoryHubApi.getProductionReport('month');
     setState(() {
       _stock = stock;
       _forecast = forecast;

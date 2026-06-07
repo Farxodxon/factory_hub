@@ -88,14 +88,14 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
     );
 
     if (result == true && name.text.isNotEmpty) {
-      await FactoryHubApi.createMaterial(
-        name: name.text.trim(),
-        type: type,
-        unit: unit,
-        minStock: double.tryParse(minStock.text) ?? 0,
-        maxStock: double.tryParse(maxStock.text) ?? 0,
-        leadTime: int.tryParse(leadTime.text) ?? 30,
-      );
+      await FactoryHubApi.createMaterial({
+        'name': name.text.trim(),
+        'type': type,
+        'unit': unit,
+        'min_stock': double.tryParse(minStock.text) ?? 0,
+        'max_stock': double.tryParse(maxStock.text) ?? 0,
+        'lead_time_days': int.tryParse(leadTime.text) ?? 30,
+      });
       _load();
     }
   }
