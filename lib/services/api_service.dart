@@ -35,6 +35,10 @@ class FactoryHubApi {
     String username, String email, String password, String secret) async =>
       _post('/setup', {'username': username, 'email': email, 'password': password, 'secret_key': secret}, requiresAuth: false);
 
+
+  static Future<Map<String, dynamic>> getFactoryAdminDashboard() async =>
+      _get('/dashboard/factory_admin');
+
   // ─── Dashboard ────────────────────────────────────────────
   static Future<Map<String, dynamic>> getDashboard() async =>
       _get('/dashboard/summary');
@@ -87,6 +91,31 @@ class FactoryHubApi {
 
   static Future<Map<String, dynamic>> createUser(Map<String, dynamic> data) async =>
       _post('/users', data);
+
+// ─── Factories (Super Admin) ──────────────────────────────
+  static Future<Map<String, dynamic>> getFactories() async =>
+      _get('/factories');
+
+  static Future<Map<String, dynamic>> createFactory({
+    required String name,
+    String? address,
+  }) async =>
+      _post('/factories', {'name': name, 'address': address});
+
+  static Future<Map<String, dynamic>> updateFactory(
+      int id, {
+        String? name,
+        String? address,
+        bool? isActive,
+      }) async =>
+      _put('/factories/$id', {
+        if (name != null) 'name': name,
+        if (address != null) 'address': address,
+        if (isActive != null) 'isActive': isActive,
+      });
+
+  static Future<Map<String, dynamic>> getSuperAdminDashboard() async =>
+      _get('/dashboard/super_admin');
 
   // ─── Kategoriyalar ────────────────────────────────────────
   static Future<Map<String, dynamic>> getCategories() async => _get('/categories');
