@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'auth_storage.dart';
 
 class FactoryHubApi {
   static const String baseUrl = 'https://flutter-backend-m8is.onrender.com';
@@ -16,32 +17,80 @@ class FactoryHubApi {
   static int? get factoryId => _currentUser?['factoryId'] as int?;
   static bool get isLoggedIn => _token != null;
 
-  static void logout() {
-    _token = null;
-    _currentUser = null;
+  // Ilova ishga tushganda sessiyani tiklash
+  static Future<bool> restoreSession() async {
+    try {
+      final token = await AuthStorage.getToken();
+      final user = await AuthStorage.getUser();
+      if (token != null && user != null) {
+        _token = token;
+        _currentUser = user;
+        return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
   }
 
-  // ─── Auth ─────────────────────────────────────────────────
+  // Login
   static Future<Map<String, dynamic>> login(String email, String password) async {
-    final result = await _post('/login', {'email': email, 'password': password}, requiresAuth: false);
+    final result = await _post(
+      '/login',
+      {'email': email, 'password': password},
+      requiresAuth: false,
+    );
     if (result['error'] == null) {
       _token = result['token'] as String?;
       _currentUser = result['user'] as Map<String, dynamic>?;
+      // Persistent saqlash
+      if (_token != null && _currentUser != null) {
+        await AuthStorage.saveSession(_token!, _currentUser!);
+      }
     }
     return result;
   }
 
+  // Chiqish
+  static Future<void> logout() async {
+    _token = null;
+    _currentUser = null;
+    await AuthStorage.clearSession();
+  }
+
+  // Setup
   static Future<Map<String, dynamic>> setupSuperAdmin(
     String username, String email, String password, String secret) async =>
-      _post('/setup', {'username': username, 'email': email, 'password': password, 'secret_key': secret}, requiresAuth: false);
-
-
-  static Future<Map<String, dynamic>> getFactoryAdminDashboard() async =>
-      _get('/dashboard/factory_admin');
+      _post('/setup', {
+        'username': username, 'email': email,
+        'password': password, 'secret_key': secret,
+      }, requiresAuth: false);
 
   // ─── Dashboard ────────────────────────────────────────────
   static Future<Map<String, dynamic>> getDashboard() async =>
       _get('/dashboard/summary');
+
+  static Future<Map<String, dynamic>> getSuperAdminDashboard() async =>
+      _get('/dashboard/super_admin');
+
+  static Future<Map<String, dynamic>> getFactoryAdminDashboard() async =>
+      _get('/dashboard/factory_admin');
+
+  // ─── Factories ────────────────────────────────────────────
+  static Future<Map<String, dynamic>> getFactories() async =>
+      _get('/factories');
+
+  static Future<Map<String, dynamic>> createFactory({
+    required String name, String? address,
+  }) async => _post('/factories', {'name': name, 'address': address});
+
+  static Future<Map<String, dynamic>> updateFactory(int id, {
+    String? name, String? address, bool? isActive,
+  }) async => _put('/factories/$id', {
+    if (name != null) 'name': name,
+    if (address != null) 'address': address,
+    if (isActive != null) 'isActive': isActive,
+  });
 
   // ─── Materiallar ──────────────────────────────────────────
   static Future<Map<String, dynamic>> getMaterials() async =>
@@ -92,35 +141,15 @@ class FactoryHubApi {
   static Future<Map<String, dynamic>> createUser(Map<String, dynamic> data) async =>
       _post('/users', data);
 
-// ─── Factories (Super Admin) ──────────────────────────────
-  static Future<Map<String, dynamic>> getFactories() async =>
-      _get('/factories');
-
-  static Future<Map<String, dynamic>> createFactory({
-    required String name,
-    String? address,
-  }) async =>
-      _post('/factories', {'name': name, 'address': address});
-
-  static Future<Map<String, dynamic>> updateFactory(
-      int id, {
-        String? name,
-        String? address,
-        bool? isActive,
-      }) async =>
-      _put('/factories/$id', {
-        if (name != null) 'name': name,
-        if (address != null) 'address': address,
-        if (isActive != null) 'isActive': isActive,
-      });
-
-  static Future<Map<String, dynamic>> getSuperAdminDashboard() async =>
-      _get('/dashboard/super_admin');
+  static Future<Map<String, dynamic>> updateUser(int id, Map<String, dynamic> data) async =>
+      _put('/users/$id', data);
 
   // ─── Kategoriyalar ────────────────────────────────────────
-  static Future<Map<String, dynamic>> getCategories() async => _get('/categories');
+  static Future<Map<String, dynamic>> getCategories() async =>
+      _get('/categories');
 
-  static Future<Map<String, dynamic>> getProductTypes() async => _get('/product-types');
+  static Future<Map<String, dynamic>> getProductTypes() async =>
+      _get('/product-types');
 
   // ═══════════════════════════════════════════════════════════
   // PRIVATE HTTP METHODS
@@ -146,20 +175,27 @@ class FactoryHubApi {
     try {
       final data = jsonDecode(response.body);
       if (data is Map<String, dynamic>) {
+        if (response.statusCode == 401) {
+          // Token muddati o'tgan — sessiyani tozalash
+          logout();
+          return {'error': 'Sessiya tugadi. Qayta kiring.', 'unauthorized': true};
+        }
         if (response.statusCode >= 400) {
           return {'error': data['error'] ?? 'Xatolik: ${response.statusCode}'};
         }
         return {'success': true, ...data};
       }
       return {'success': true, 'data': data};
-    } catch (e) {
-      return {'error': 'JSON parse xatosi'};
+    } catch (_) {
+      return {'error': 'Javob o\'qishda xatolik'};
     }
   }
 
   static Map<String, dynamic> _handleError(Object e) {
     if (kDebugMode) print('API xatolik: $e');
-    if (e.toString().contains('TimeoutException')) return {'error': 'Server javob bermadi'};
+    if (e.toString().contains('TimeoutException')) {
+      return {'error': 'Server javob bermadi. Qayta urinib ko\'ring.'};
+    }
     return {'error': 'Tarmoq xatosi. Internetni tekshiring.'};
   }
 
