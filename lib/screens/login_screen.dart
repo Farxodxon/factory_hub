@@ -47,33 +47,6 @@ class _LoginScreenState extends State<LoginScreen> {
     Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => screen));
   }
 
-  // Future<void> _register() async {
-  //   if (_email.text.trim().isEmpty) { _showError('Emailni kiriting'); return; }
-  //   if (_password.text.isEmpty) { _showError('Parolni kiriting'); return; }
-  //   if (_password.text.length < 3) { _showError('Parol kamida 3 ta belgi'); return; }
-  //
-  //   setState(() { _loading = true; _error = null; _success = null; });
-  //
-  //   final username = _email.text.trim().split('@').first;
-  //   final result = await FactoryHubApi.login(_email.text.trim(), _password.text.trim());
-  //
-  //   // Agar login muvaffaqiyatsiz bo'lsa, ro'yxatdan o'tkazamiz
-  //   if (result['error'] != null) {
-  //     final regResult = await FactoryHubApi.setupSuperAdmin(
-  //       username, _email.text.trim(), _password.text.trim(), 'factory_hub_2026_secret',
-  //     );
-  //     setState(() => _loading = false);
-  //     if (regResult['error'] != null) {
-  //       _showError(regResult['error']);
-  //     } else {
-  //       _showSuccess('Ro\'yxatdan o\'tdingiz! Endi kirishingiz mumkin');
-  //     }
-  //     return;
-  //   }
-  //
-  //   setState(() => _loading = false);
-  //   _showError('Bu foydalanuvchi allaqachon mavjud');
-  // }
 
   void _showError(String msg) {
     setState(() { _error = msg; _success = null; });
@@ -107,7 +80,6 @@ class _LoginScreenState extends State<LoginScreen> {
           _loading ? const CircularProgressIndicator() : Column(children: [
             SizedBox(width: double.infinity, height: 48, child: ElevatedButton(onPressed: _login, style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1565C0), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: const Text('Kirish', style: TextStyle(fontSize: 16)))),
             // const SizedBox(height: 10),
-            // SizedBox(width: double.infinity, height: 48, child: OutlinedButton(onPressed: _register, style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF1565C0), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: const Text('Ro\'yxatdan o\'tish', style: TextStyle(fontSize: 16)))),
           ]),
         ])))),
       ),
