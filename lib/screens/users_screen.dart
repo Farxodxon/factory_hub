@@ -1,3 +1,4 @@
+import 'package:factory_hub/screens/user_assign_screen.dart';
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 
@@ -174,6 +175,14 @@ class _UsersScreenState extends State<UsersScreen> {
     }
   }
 
+  Future<void> _openAssign(Map user) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => UserAssignScreen(user: user)),
+    );
+    if (result == true) _load();
+  }
+
   Future<void> _toggleBlock(Map user) async {
     final isActive = user['isActive'] ?? true;
     final action = isActive ? 'bloklash' : 'faollashtirish';
@@ -347,6 +356,7 @@ class _UsersScreenState extends State<UsersScreen> {
     final color = _roleColor(role);
     final isActive = user['isActive'] ?? true;
     final username = user['username'] ?? '?';
+    print('Building card for user: $username, role: $role, active: $isActive');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -396,6 +406,15 @@ class _UsersScreenState extends State<UsersScreen> {
         trailing: PopupMenuButton(
           icon: const Icon(Icons.more_vert, color: Colors.grey),
           itemBuilder: (_) => [
+            if (role.toString() == "employee")
+              const PopupMenuItem(
+                value: 'assign',
+                child: Row(children: [
+                  Icon(Icons.assignment_ind, color: Color(0xFF1565C0), size: 18),
+                  SizedBox(width: 8),
+                  Text('Bolim/Ombor biriktirish'),
+                ]),
+              ),
             PopupMenuItem(
               value: 'toggle',
               child: Row(children: [
@@ -406,7 +425,10 @@ class _UsersScreenState extends State<UsersScreen> {
               ]),
             ),
           ],
-          onSelected: (v) { if (v == 'toggle') _toggleBlock(user); },
+          onSelected: (v) {
+            if (v == 'toggle') _toggleBlock(user);
+            if (v == 'assign') _openAssign(user);
+          },
         ),
       ),
     );

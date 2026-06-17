@@ -144,9 +144,7 @@ class FactoryHubApi {
   static Future<Map<String, dynamic>> updateUser(int id, Map<String, dynamic> data) async =>
       _put('/users/$id', data);
 
-  // ─── Departamentlar─────────────────────────────────────
-
-  static Future<Map<String, dynamic>> getDepartments() async =>
+      static Future<Map<String, dynamic>> getDepartments() async =>
       _get('/departments');
 
   static Future<Map<String, dynamic>> createDepartment(Map<String, dynamic> data) async =>
