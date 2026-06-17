@@ -99,6 +99,12 @@ class FactoryHubApi {
   static Future<Map<String, dynamic>> createMaterial(Map<String, dynamic> data) async =>
       _post('/materials', data);
 
+      static Future<Map<String, dynamic>> updateMaterial(int id, Map<String, dynamic> data) async =>
+      _put('/materials/$id', data);
+
+  static Future<Map<String, dynamic>> deleteMaterial(int id) async =>
+      _delete('/materials/$id');
+
   // ─── Omborlar ─────────────────────────────────────────────
   static Future<Map<String, dynamic>> getWarehouses() async =>
       _get('/warehouses');
@@ -246,6 +252,15 @@ class FactoryHubApi {
         Uri.parse('$baseUrl$path'),
         headers: _headers(),
         body: jsonEncode(body),
+      ).timeout(timeout);
+      return _parseResponse(r);
+    } catch (e) { return _handleError(e); }
+  }
+  static Future<Map<String, dynamic>> _delete(String path) async {
+    try {
+      final r = await http.delete(
+        Uri.parse('$baseUrl$path'),
+        headers: _headers(),
       ).timeout(timeout);
       return _parseResponse(r);
     } catch (e) { return _handleError(e); }
