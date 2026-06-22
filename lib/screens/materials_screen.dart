@@ -77,7 +77,8 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
                 items: const [
                   DropdownMenuItem(value: 'raw', child: Text('Xom ashyo')),
                   DropdownMenuItem(value: 'purchased', child: Text('Sotib olingan')),
-                  DropdownMenuItem(value: 'self_produced', child: Text('Ozimizda ishlab chiqarilgan')),
+                  DropdownMenuItem(value: 'semi_finished', child: Text('Yarim tayyor')),
+                  DropdownMenuItem(value: 'finished', child: Text('Tayyor mahsulot')),
                 ],
                 onChanged: (v) => setDialogState(() => type = v!),
               ),
@@ -176,7 +177,8 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
     switch (type) {
       case 'raw': return Colors.blue;
       case 'purchased': return Colors.orange;
-      case 'self_produced': return Colors.green;
+      case 'semi_finished': return Colors.purple;
+      case 'finished': return Colors.green;
       default: return Colors.grey;
     }
   }
@@ -185,7 +187,8 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
     switch (type) {
       case 'raw': return 'Xom ashyo';
       case 'purchased': return 'Sotib olingan';
-      case 'self_produced': return 'Ozimizda ishlab chiqarilgan';
+      case 'semi_finished': return 'Yarim tayyor';
+      case 'finished': return 'Tayyor mahsulot';
       default: return type ?? '-';
     }
   }
@@ -194,7 +197,8 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
     switch (type) {
       case 'raw': return Icons.science;
       case 'purchased': return Icons.shopping_cart;
-      case 'self_produced': return Icons.precision_manufacturing;
+      case 'semi_finished': return Icons.precision_manufacturing;
+      case 'finished': return Icons.check_circle;
       default: return Icons.inventory;
     }
   }
@@ -245,7 +249,8 @@ class _MaterialsScreenState extends State<MaterialsScreen> {
                 const SizedBox(width: 8),
                 _chip('purchased', 'Sotib olingan'),
                 const SizedBox(width: 8),
-                _chip('self_produced', 'Oz ishlab chiqarilgan'),
+                _chip('semi_finished', 'Yarim tayyor'),
+                _chip('finished', 'Tayyor mahsulot'),
               ]),
             ),
           ]),
