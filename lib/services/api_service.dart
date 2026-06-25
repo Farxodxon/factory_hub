@@ -112,11 +112,25 @@ class FactoryHubApi {
   static Future<Map<String, dynamic>> addTransaction(Map<String, dynamic> data) async =>
       _post('/warehouse/transaction', data);
 
+  static Future<Map<String, dynamic>> getWarehouseDetail(int id) async =>
+      _get('/warehouses/$id');
+
   // ─── BOM ──────────────────────────────────────────────────
   static Future<Map<String, dynamic>> getBoms() async => _get('/boms');
 
+  static Future<Map<String, dynamic>> getBomDetail(int id) async => _get('/boms/$id');
+
   static Future<Map<String, dynamic>> createBom(Map<String, dynamic> data) async =>
       _post('/boms', data);
+
+  static Future<Map<String, dynamic>> addIngredient(int bomId, Map<String, dynamic> data) async =>
+      _post('/boms/$bomId', data);
+
+  static Future<Map<String, dynamic>> deleteIngredient(int bomId, int ingredientId) async =>
+      _delete('/boms/$bomId/ingredients/$ingredientId');
+
+  static Future<Map<String, dynamic>> deleteBom(int id) async =>
+      _delete('/boms/$id');
 
   // ─── Ishlab chiqarish ─────────────────────────────────────
   static Future<Map<String, dynamic>> startProduction(Map<String, dynamic> data) async =>
