@@ -132,6 +132,13 @@ class FactoryHubApi {
   // ─── Ogohlantirishlar ──────────────────────────────────────
   static Future<Map<String, dynamic>> getAlerts() async => _get('/alerts');
 
+  // ─── Kritik darajalar (thresholds, admin) ──────────────────
+  static Future<Map<String, dynamic>> getThresholds({String? type}) async =>
+      _get('/thresholds${type == null ? '' : '?type=$type'}');
+
+  static Future<Map<String, dynamic>> updateThreshold(int id, num minQty) async =>
+      _put('/thresholds', {'id': id, 'min_qty': minQty});
+
   // ─── Foydalanuvchilar ──────────────────────────────────────
   static Future<Map<String, dynamic>> getUsers() async => _get('/users');
 

@@ -10,6 +10,7 @@ import 'plans_screen.dart';
 import 'production_screen.dart';
 import 'reports_screen.dart';
 import 'supplier_orders_screen.dart';
+import 'thresholds_screen.dart';
 import 'users_screen.dart';
 import 'warehouses_screen.dart';
 
@@ -34,6 +35,7 @@ class _HomeShellState extends State<HomeShell> {
         const SupplierOrdersScreen(),
         const ReportsScreen(),
         const AlertsScreen(),
+        if (_role.canManageThresholds) const ThresholdsScreen(),
         if (_role.canManageUsers) const UsersScreen(),
       ];
 
@@ -69,7 +71,9 @@ class _HomeShellState extends State<HomeShell> {
               _item(5, Icons.local_shipping, "Ta'minotchi buyurtmalari"),
             _item(6, Icons.bar_chart, 'Hisobotlar'),
             _item(7, Icons.notifications_active, 'Ogohlantirishlar'),
-            if (_role.canManageUsers) _item(8, Icons.people, 'Foydalanuvchilar'),
+            if (_role.canManageThresholds)
+              _item(8, Icons.tune, 'Kritik darajalar'),
+            if (_role.canManageUsers) _item(9, Icons.people, 'Foydalanuvchilar'),
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout),
@@ -100,7 +104,16 @@ class _HomeShellState extends State<HomeShell> {
         },
       );
 
-  String _titleFor(int i) =>
-      ['Bosh oyna', 'Omborlar', 'Katalog', 'Rejalar', 'Ishlab chiqarish',
-       "Ta'minotchi buyurtmalari", 'Hisobotlar', 'Ogohlantirishlar', 'Foydalanuvchilar'][i];
+  String _titleFor(int i) => [
+        'Bosh oyna',
+        'Omborlar',
+        'Katalog',
+        'Rejalar',
+        'Ishlab chiqarish',
+        "Ta'minotchi buyurtmalari",
+        'Hisobotlar',
+        'Ogohlantirishlar',
+        'Kritik darajalar',
+        'Foydalanuvchilar'
+      ][i];
 }

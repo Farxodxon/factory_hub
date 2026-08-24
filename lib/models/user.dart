@@ -33,6 +33,7 @@ extension RoleX on String {
   }
 
   bool get canManageUsers => isAdmin;
+  bool get canManageThresholds => isAdmin;
   bool get canPlan => isAdmin || isOpsManager;
   bool get canTransactStock => !isDirector;
   bool get canControlWarehouses => isAdmin || isController;
