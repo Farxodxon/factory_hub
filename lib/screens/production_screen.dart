@@ -35,6 +35,7 @@ class _ProductionScreenState extends State<ProductionScreen> {
     return Scaffold(
       floatingActionButton: FactoryHubApi.role.canPlan
           ? FloatingActionButton.extended(
+              heroTag: 'fab_production',
               onPressed: () async {
                 final started = await showModalBottomSheet<bool>(
                   context: context,

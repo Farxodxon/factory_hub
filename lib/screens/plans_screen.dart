@@ -58,6 +58,7 @@ class _PlansScreenState extends State<PlansScreen> {
     return Scaffold(
       floatingActionButton: FactoryHubApi.role.canPlan
           ? FloatingActionButton.extended(
+              heroTag: 'fab_plans',
               onPressed: _createPlan,
               icon: const Icon(Icons.add),
               label: const Text('Reja'),

@@ -44,6 +44,7 @@ class _SupplierOrdersScreenState extends State<SupplierOrdersScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'fab_supplier_orders',
         onPressed: _create,
         icon: const Icon(Icons.add),
         label: const Text('Buyurtma'),

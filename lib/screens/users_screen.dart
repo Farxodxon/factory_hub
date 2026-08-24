@@ -43,6 +43,7 @@ class _UsersScreenState extends State<UsersScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'fab_users',
         onPressed: _create,
         icon: const Icon(Icons.person_add),
         label: const Text('Xodim'),
@@ -68,7 +69,7 @@ class _UsersScreenState extends State<UsersScreen> {
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(u['role'].label),
+                          Text((u['role'] as String?)?.label ?? '-'),
                           if (warehouses.isNotEmpty)
                             Text('Omborlar: $warehouses',
                                 style: const TextStyle(fontSize: 11), maxLines: 2),
@@ -153,6 +154,7 @@ class _AssignSheetState extends State<_AssignSheet> {
     return Scaffold(
       appBar: AppBar(title: Text('${widget.username} — omborlar')),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'fab_users_assign',
         onPressed: _submit,
         icon: const Icon(Icons.check),
         label: const Text('Saqlash'),

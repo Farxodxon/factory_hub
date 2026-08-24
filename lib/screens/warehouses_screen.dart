@@ -73,6 +73,7 @@ class _WarehousesScreenState extends State<WarehousesScreen> {
       floatingActionButton:
           FactoryHubApi.role.canControlWarehouses
               ? FloatingActionButton.extended(
+                  heroTag: 'fab_warehouses',
                   onPressed: _createWarehouse,
                   icon: const Icon(Icons.add),
                   label: const Text('Ombor'),
