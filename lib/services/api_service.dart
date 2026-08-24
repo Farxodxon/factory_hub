@@ -6,7 +6,8 @@ import 'package:http/http.dart' as http;
 import 'auth_storage.dart';
 
 class FactoryHubApi {
-  static const String baseUrl = 'https://flutter-backend-m8is.onrender.com';
+  static const String baseUrl = 'https://exim-raw-api.onrender.com';
+  static const String basePath = '/fh';
   static const Duration timeout = Duration(seconds: 60);
 
   static String? _token;
@@ -206,7 +207,7 @@ class FactoryHubApi {
   }) async {
     try {
       final r = await http
-          .get(Uri.parse('$baseUrl$path'), headers: _headers(requiresAuth: requiresAuth))
+          .get(Uri.parse('$baseUrl$basePath$path'), headers: _headers(requiresAuth: requiresAuth))
           .timeout(timeout);
       return _parseResponse(r);
     } catch (e) {
@@ -222,7 +223,7 @@ class FactoryHubApi {
     try {
       final r = await http
           .post(
-            Uri.parse('$baseUrl$path'),
+            Uri.parse('$baseUrl$basePath$path'),
             headers: _headers(requiresAuth: requiresAuth),
             body: jsonEncode(body),
           )
@@ -237,7 +238,7 @@ class FactoryHubApi {
     try {
       final r = await http
           .put(
-            Uri.parse('$baseUrl$path'),
+            Uri.parse('$baseUrl$basePath$path'),
             headers: _headers(),
             body: jsonEncode(body),
           )
@@ -251,7 +252,7 @@ class FactoryHubApi {
   static Future<Map<String, dynamic>> _delete(String path) async {
     try {
       final r = await http
-          .delete(Uri.parse('$baseUrl$path'), headers: _headers())
+          .delete(Uri.parse('$baseUrl$basePath$path'), headers: _headers())
           .timeout(timeout);
       return _parseResponse(r);
     } catch (e) {
