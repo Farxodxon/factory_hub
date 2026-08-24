@@ -1,31 +1,40 @@
-class FactoryUser {
-  final String id;
-  final String username;
-  final String email;
-  final String createdAt;
+class AppRoles {
+  static const admin = 'admin';
+  static const operationsManager = 'operations_manager';
+  static const warehouseKeeper = 'warehouse_keeper';
+  static const warehouseController = 'warehouse_controller';
+  static const director = 'director';
 
-  FactoryUser({
-    required this.id,
-    required this.username,
-    required this.email,
-    required this.createdAt,
-  });
+  static bool isValid(String role) =>
+      [admin, operationsManager, warehouseKeeper, warehouseController, director].contains(role);
+}
 
-  factory FactoryUser.fromJson(Map<String, dynamic> json) {
-    return FactoryUser(
-      id: json['id']?.toString() ?? '',
-      username: json['username'] ?? '',
-      email: json['email'] ?? '',
-      createdAt: json['createdAt'] ?? '',
-    );
+extension RoleX on String {
+  bool get isAdmin => this == AppRoles.admin;
+  bool get isOpsManager => this == AppRoles.operationsManager;
+  bool get isKeeper => this == AppRoles.warehouseKeeper;
+  bool get isController => this == AppRoles.warehouseController;
+  bool get isDirector => this == AppRoles.director;
+
+  String get label {
+    switch (this) {
+      case AppRoles.admin:
+        return 'Admin';
+      case AppRoles.operationsManager:
+        return 'Ish boshqaruvchi';
+      case AppRoles.warehouseKeeper:
+        return 'Omborchi';
+      case AppRoles.warehouseController:
+        return 'Ombor nazoratchisi';
+      case AppRoles.director:
+        return 'Direktor';
+    }
+    return this;
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'username': username,
-      'email': email,
-      'createdAt': createdAt,
-    };
-  }
+  bool get canManageUsers => isAdmin;
+  bool get canPlan => isAdmin || isOpsManager;
+  bool get canTransactStock => !isDirector;
+  bool get canControlWarehouses => isAdmin || isController;
+  bool get isReadOnly => isDirector;
 }

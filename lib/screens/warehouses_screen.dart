@@ -1,14 +1,126 @@
 import 'package:flutter/material.dart';
+
+import '../models/user.dart';
 import '../services/api_service.dart';
 
 class WarehousesScreen extends StatefulWidget {
   const WarehousesScreen({super.key});
+
   @override
   State<WarehousesScreen> createState() => _WarehousesScreenState();
 }
 
 class _WarehousesScreenState extends State<WarehousesScreen> {
-  List _warehouses = [];
+  List<dynamic> _warehouses = [];
+  String? _error;
+  bool _loading = true;
+
+  static const Map<String, String> _typeLabels = {
+    'raw': 'Xom ashyo',
+    'finished': 'Tayyor mahsulot',
+    'spare_parts': 'Ehtiyot qismlar',
+    'semi_finished': 'Yarim tayyor',
+    'sales': 'Sotuv',
+    'dealer': 'Dilerlar',
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final result = await FactoryHubApi.getWarehouses();
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      if (result['error'] != null) {
+        _error = result['error'];
+      } else {
+        _warehouses = result['warehouses'] ?? [];
+        _error = null;
+      }
+    });
+  }
+
+  Future<void> _createWarehouse() async {
+    if (!FactoryHubApi.role.canControlWarehouses) return;
+    final created = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => const _CreateWarehouseSheet(),
+    );
+    if (created == true) _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(_error!),
+            const SizedBox(height: 12),
+            ElevatedButton(onPressed: _load, child: const Text('Qayta urinish')),
+          ],
+        ),
+      );
+    }
+    return Scaffold(
+      floatingActionButton:
+          FactoryHubApi.role.canControlWarehouses
+              ? FloatingActionButton.extended(
+                  onPressed: _createWarehouse,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Ombor'),
+                )
+              : null,
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView.builder(
+                padding: const EdgeInsets.all(12),
+                itemCount: _warehouses.length,
+                itemBuilder: (_, i) {
+                  final w = _warehouses[i];
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      leading: const Icon(Icons.warehouse, color: Color(0xFF1565C0)),
+                      title: Text(w['name'] ?? ''),
+                      subtitle: Text(_typeLabels[w['type']] ?? w['type'] ?? ''),
+                      trailing: Text('${w['itemCount'] ?? 0} element'),
+                      onTap: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => _WarehouseDetail(id: w['id'])),
+                        );
+                        _load();
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+    );
+  }
+}
+
+class _WarehouseDetail extends StatefulWidget {
+  const _WarehouseDetail({required this.id});
+
+  final int id;
+
+  @override
+  State<_WarehouseDetail> createState() => _WarehouseDetailState();
+}
+
+class _WarehouseDetailState extends State<_WarehouseDetail> {
+  Map<String, dynamic>? _detail;
   bool _loading = true;
   String? _error;
 
@@ -19,117 +131,76 @@ class _WarehousesScreenState extends State<WarehousesScreen> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
-    final result = await FactoryHubApi.getWarehouses();
-    if (result['error'] != null) {
-      setState(() { _error = result['error']; _loading = false; });
-    } else {
-      setState(() {
-        _warehouses = (result['warehouses'] as List?) ?? [];
-        _loading = false;
-      });
-    }
+    setState(() => _loading = true);
+    final result = await FactoryHubApi.getWarehouseDetail(widget.id);
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      if (result['error'] != null) {
+        _error = result['error'];
+      } else {
+        _detail = result;
+        _error = null;
+      }
+    });
   }
 
-  IconData _icon(String? type) {
-    switch (type) {
-      case 'raw': return Icons.science;
-      case 'purchased': return Icons.shopping_cart;
-      case 'semi_finished': return Icons.hourglass_bottom;
-      case 'finished': return Icons.check_circle;
-      case 'sales': return Icons.store;
-      default: return Icons.warehouse;
-    }
-  }
-
-  Color _color(String? type) {
-    switch (type) {
-      case 'raw': return Colors.blue;
-      case 'purchased': return Colors.orange;
-      case 'semi_finished': return Colors.purple;
-      case 'finished': return Colors.green;
-      case 'sales': return Colors.teal;
-      default: return Colors.grey;
-    }
-  }
-
-  String _typeLabel(String? type) {
-    switch (type) {
-      case 'raw': return 'Xom ashyo';
-      case 'purchased': return 'Sotib olingan';
-      case 'semi_finished': return 'Yarim tayyor';
-      case 'finished': return 'Tayyor mahsulot';
-      case 'sales': return 'Sotuv';
-      default: return type ?? '-';
-    }
+  Future<void> _addTransaction(String direction) async {
+    final done = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _TransactionSheet(warehouseId: widget.id, direction: direction),
+    );
+    if (done == true) _load();
   }
 
   @override
   Widget build(BuildContext context) {
+    final warehouse = _detail?['warehouse'];
+    final stock = _detail?['stock'] as List<dynamic>? ?? [];
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4F8),
-      appBar: AppBar(
-        title: const Text('Omborlar', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1565C0),
-        foregroundColor: Colors.white,
-        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _load)],
-      ),
+      appBar: AppBar(title: Text(warehouse?['name'] ?? 'Ombor')),
+      floatingActionButton: FactoryHubApi.role.canTransactStock
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FloatingActionButton.small(
+                  heroTag: 'in',
+                  onPressed: () => _addTransaction('in'),
+                  child: const Icon(Icons.call_received),
+                ),
+                const SizedBox(height: 8),
+                FloatingActionButton.small(
+                  heroTag: 'out',
+                  onPressed: () => _addTransaction('out'),
+                  child: const Icon(Icons.outbound),
+                ),
+              ],
+            )
+          : null,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  const Icon(Icons.error_outline, size: 50, color: Colors.red),
-                  const SizedBox(height: 10),
-                  Text(_error!, style: const TextStyle(color: Colors.red)),
-                  ElevatedButton(onPressed: _load, child: const Text('Qayta')),
-                ]))
-              : _warehouses.isEmpty
-                  ? const Center(child: Text('Omborlar topilmadi', style: TextStyle(color: Colors.grey)))
+              ? Center(child: Text(_error!))
+              : stock.isEmpty
+                  ? const Center(child: Text('Bu omborda qoldiq yoq'))
                   : RefreshIndicator(
                       onRefresh: _load,
                       child: ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _warehouses.length,
+                        padding: const EdgeInsets.all(12),
+                        itemCount: stock.length,
                         itemBuilder: (_, i) {
-                          final w = _warehouses[i];
-                          final color = _color(w['type']);
-                          final count = w['materialCount'] ?? 0;
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(14),
-                              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6)],
-                            ),
+                          final item = stock[i];
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 6),
                             child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                              leading: Container(
-                                width: 48, height: 48,
-                                decoration: BoxDecoration(
-                                  color: color.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Icon(_icon(w['type']), color: color),
+                              title: Text(item['name'] ?? ''),
+                              subtitle: Text(item['itemType'] ?? ''),
+                              trailing: Text(
+                                '${item['balance']} ${item['unit'] ?? ''}',
+                                style: const TextStyle(fontWeight: FontWeight.bold),
                               ),
-                              title: Text(w['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                              subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                const SizedBox(height: 4),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: color.withValues(alpha: 0.08),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Text(_typeLabel(w['type']), style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
-                                ),
-                                const SizedBox(height: 4),
-                                Text('$count ta material', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                              ]),
-                              trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => WarehouseDetailScreen(warehouse: w)),
-                              ).then((_) => _load()),
                             ),
                           );
                         },
@@ -139,366 +210,237 @@ class _WarehousesScreenState extends State<WarehousesScreen> {
   }
 }
 
-// ═══════════════════════════════════════════════════
-// WAREHOUSE DETAIL SCREEN
-// ═══════════════════════════════════════════════════
+class _TransactionSheet extends StatefulWidget {
+  const _TransactionSheet({required this.warehouseId, required this.direction});
 
-class WarehouseDetailScreen extends StatefulWidget {
-  final Map warehouse;
-  const WarehouseDetailScreen({super.key, required this.warehouse});
+  final int warehouseId;
+  final String direction;
 
   @override
-  State<WarehouseDetailScreen> createState() => _WarehouseDetailScreenState();
+  State<_TransactionSheet> createState() => _TransactionSheetState();
 }
 
-class _WarehouseDetailScreenState extends State<WarehouseDetailScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabCtrl;
-  Map? _detail;
-  bool _loading = true;
+class _TransactionSheetState extends State<_TransactionSheet> {
+  final _qty = TextEditingController();
+  final _note = TextEditingController();
+  List<dynamic> _items = [];
+  int? _selectedRawId;
+  String? _selectedBarcode;
+  String _selectedType = 'raw_material';
   String? _error;
+  bool _loadingItems = true;
 
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 2, vsync: this);
-    _load();
+    _loadItems();
   }
 
-  @override
-  void dispose() {
-    _tabCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
-    final result = await FactoryHubApi.getWarehouseDetail(
-      int.parse(widget.warehouse['id'].toString()),
-    );
-    if (result['error'] != null) {
-      setState(() { _error = result['error']; _loading = false; });
-    } else {
-      setState(() { _detail = result; _loading = false; });
-    }
-  }
-
-  Future<void> _addTransaction(String txType) async {
-    final materials = (_detail?['materials'] as List?) ?? [];
-    if (materials.isEmpty) {
-      _showMsg('Omborga biriktirilgan material yoq', isError: true);
-      return;
-    }
-
-    int? selectedMaterialId = int.tryParse(materials.first['materialId'].toString());
-    final qtyCtrl = TextEditingController();
-    final notesCtrl = TextEditingController();
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialog) => AlertDialog(
-          title: Row(children: [
-            Icon(txType == 'in' ? Icons.add_circle : Icons.remove_circle,
-                color: txType == 'in' ? Colors.green : Colors.red),
-            const SizedBox(width: 8),
-            Text(txType == 'in' ? 'Kirim' : 'Chiqim'),
-          ]),
-          content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              DropdownButtonFormField<int>(
-                initialValue: selectedMaterialId,
-                decoration: const InputDecoration(labelText: 'Material', border: OutlineInputBorder()),
-                items: materials.map<DropdownMenuItem<int>>((m) => DropdownMenuItem(
-                  value: int.parse(m['materialId'].toString()),
-                  child: Text(m['materialName'] ?? '', overflow: TextOverflow.ellipsis),
-                )).toList(),
-                onChanged: (v) {
-                  final m = materials.firstWhere((m) => int.parse(m['materialId'].toString()) == v);
-                  setDialog(() {
-                    selectedMaterialId = v;
-});
-                },
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: qtyCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(
-                  labelText: 'Miqdor *',
-                  border: const OutlineInputBorder(),
-                  suffixText: materials.firstWhere(
-                    (m) => int.parse(m['materialId'].toString()) == selectedMaterialId,
-                    orElse: () => {'unit': ''},
-                  )['unit'] ?? '',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: notesCtrl,
-                decoration: const InputDecoration(labelText: 'Izoh (ixtiyoriy)', border: OutlineInputBorder()),
-              ),
-              if (txType == 'out') ...[
-                const SizedBox(height: 8),
-                Builder(builder: (_) {
-                  final m = materials.firstWhere(
-                    (m) => int.parse(m['materialId'].toString()) == selectedMaterialId,
-                    orElse: () => {},
-                  );
-                  final balance = double.tryParse(m['balance']?.toString() ?? '0') ?? 0;
-                  return Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(children: [
-                      const Icon(Icons.inventory, size: 16, color: Colors.orange),
-                      const SizedBox(width: 6),
-                      Text('Mavjud: ${balance.toStringAsFixed(1)} ${m['unit'] ?? ''}',
-                          style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w600)),
-                    ]),
-                  );
-                }),
-              ],
-            ]),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Bekor')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: txType == 'in' ? Colors.green : Colors.red,
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(txType == 'in' ? 'Kirim qilish' : 'Chiqim qilish'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (ok != true) return;
-
-    final qty = double.tryParse(qtyCtrl.text);
-    if (qty == null || qty <= 0) {
-      _showMsg('Miqdorni togri kiriting', isError: true);
-      return;
-    }
-
-    final result = await FactoryHubApi.addTransaction({
-      'warehouse_id': int.parse(widget.warehouse['id'].toString()),
-      'material_id': selectedMaterialId,
-      'transaction_type': txType,
-      'quantity': qty,
-      'unit': (_detail?['materials'] as List?)?.firstWhere(
-        (m) => int.parse(m['materialId'].toString()) == selectedMaterialId,
-        orElse: () => {'unit': 'kg'},
-      )['unit'] ?? 'kg',
-      'notes': notesCtrl.text.isNotEmpty ? notesCtrl.text : null,
-      'performed_by': FactoryHubApi.userId,
-    });
-
-    if (result['error'] != null) {
-      _showMsg(result['error'], isError: true);
-    } else {
-      _showMsg(txType == 'in' ? 'Kirim amalga oshirildi!' : 'Chiqim amalga oshirildi!');
-      _load();
-    }
-  }
-
-  void _showMsg(String msg, {bool isError = false}) {
+  Future<void> _loadItems() async {
+    final result =
+        _selectedType == 'product' ? await FactoryHubApi.getProducts() : await FactoryHubApi.getRawMaterials();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: isError ? Colors.red : Colors.green),
-    );
+    setState(() {
+      _loadingItems = false;
+      _items = result['error'] != null
+          ? []
+          : (_selectedType == 'product' ? result['products'] : result['rawMaterials']) ?? [];
+    });
+  }
+
+  Future<void> _submit() async {
+    final qty = double.tryParse(_qty.text.replaceAll(',', '.'));
+    if (qty == null || qty <= 0) {
+      setState(() => _error = "Miqdorni to'g'ri kiriting");
+      return;
+    }
+
+    final data = <String, dynamic>{
+      'warehouse_id': widget.warehouseId,
+      'item_type': _selectedType,
+      'direction': widget.direction,
+      'qty': qty,
+      'note': _note.text.trim().isEmpty ? null : _note.text.trim(),
+    };
+    if (_selectedType == 'raw_material') {
+      data['ref_id'] = _selectedRawId;
+    } else {
+      data['ref_barcode'] = _selectedBarcode;
+    }
+
+    final result = await FactoryHubApi.addTransaction(data);
+    if (!mounted) return;
+    if (result['error'] != null) {
+      setState(() => _error = result['error']);
+      return;
+    }
+    Navigator.pop(context, true);
   }
 
   @override
   Widget build(BuildContext context) {
-    final name = widget.warehouse['name'] ?? 'Ombor';
-    final role = FactoryHubApi.role;
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFF0F4F8),
-      appBar: AppBar(
-        title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1565C0),
-        foregroundColor: Colors.white,
-        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _load)],
-        bottom: TabBar(
-          controller: _tabCtrl,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: const [
-            Tab(icon: Icon(Icons.inventory), text: 'Materiallar'),
-            Tab(icon: Icon(Icons.history), text: 'Tarix'),
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              widget.direction == 'in' ? 'KIRIM' : 'CHIQIM',
+              style: Theme.of(context).textTheme.titleLarge,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'raw_material', label: Text('Xom ashyo')),
+                ButtonSegment(value: 'product', label: Text('Mahsulot')),
+              ],
+              selected: {_selectedType},
+              onSelectionChanged: (s) {
+                setState(() {
+                  _selectedType = s.first;
+                  _loadingItems = true;
+                });
+                _loadItems();
+              },
+            ),
+            const SizedBox(height: 12),
+            _loadingItems
+                ? const Center(child: CircularProgressIndicator())
+                : Autocomplete<String>(
+                    optionsBuilder: (v) => _items
+                        .map((e) =>
+                            _selectedType == 'product' ? e['name'] as String : e['name'] as String)
+                        .where((n) => n.toLowerCase().contains(v.text.toLowerCase())),
+                    onSelected: (selected) {
+                      final match = _items.firstWhere((e) => e['name'] == selected);
+                      setState(() {
+                        _selectedRawId = match['id'] != null ? int.tryParse(match['id'].toString()) : null;
+                        _selectedBarcode = match['barcode']?.toString();
+                      });
+                    },
+                    fieldViewBuilder: (context, ctrl, focus, onSubmit) => TextField(
+                      controller: ctrl,
+                      focusNode: focus,
+                      decoration: InputDecoration(
+                        labelText: 'Element tanlash',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _qty,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: 'Miqdor',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _note,
+              decoration: InputDecoration(
+                labelText: 'Izoh (ixtiyoriy)',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(_error!, style: TextStyle(color: Colors.red.shade700)),
+            ],
+            const SizedBox(height: 16),
+            ElevatedButton(onPressed: _submit, child: const Text('Saqlash')),
           ],
         ),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  const Icon(Icons.error_outline, size: 50, color: Colors.red),
-                  const SizedBox(height: 10),
-                  Text(_error!, style: const TextStyle(color: Colors.red)),
-                  ElevatedButton(onPressed: _load, child: const Text('Qayta')),
-                ]))
-              : TabBarView(
-                  controller: _tabCtrl,
-                  children: [
-                    _materialsTab(),
-                    _historyTab(),
-                  ],
-                ),
-      bottomNavigationBar: role == 'employee'
-          ? null
-          : Container(
-              color: Colors.white,
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Row(children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _addTransaction('in'),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Kirim', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _addTransaction('out'),
-                    icon: const Icon(Icons.remove),
-                    label: const Text('Chiqim', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-              ]),
-            ),
-    );
-  }
-
-  Widget _materialsTab() {
-    final materials = (_detail?['materials'] as List?) ?? [];
-    if (materials.isEmpty) {
-      return const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(Icons.inventory_2_outlined, size: 70, color: Colors.grey),
-        SizedBox(height: 12),
-        Text('Hali tranzaksiya yoq', style: TextStyle(color: Colors.grey, fontSize: 16)),
-      ]));
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: materials.length,
-      itemBuilder: (_, i) {
-        final m = materials[i];
-        final totalIn = double.tryParse(m['totalIn']?.toString() ?? '0') ?? 0;
-        final totalOut = double.tryParse(m['totalOut']?.toString() ?? '0') ?? 0;
-        final balance = double.tryParse(m['balance']?.toString() ?? '0') ?? 0;
-        return Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6)],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Expanded(child: Text(m['materialName'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
-                Text(m['unit'] ?? '', style: const TextStyle(color: Colors.grey)),
-              ]),
-              const SizedBox(height: 10),
-              Row(children: [
-                _statBox('Kirim', totalIn, Colors.green),
-                const SizedBox(width: 8),
-                _statBox('Chiqim', totalOut, Colors.red),
-                const SizedBox(width: 8),
-                _statBox('Qoldiq', balance, balance > 0 ? Colors.blue : Colors.grey),
-              ]),
-            ]),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _statBox(String label, double value, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Column(children: [
-          Text(value.toStringAsFixed(1), style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 16)),
-          Text(label, style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 11)),
-        ]),
-      ),
-    );
-  }
-
-  Widget _historyTab() {
-    final transactions = (_detail?['transactions'] as List?) ?? [];
-    if (transactions.isEmpty) {
-      return const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(Icons.history, size: 70, color: Colors.grey),
-        SizedBox(height: 12),
-        Text('Tarix yoq', style: TextStyle(color: Colors.grey, fontSize: 16)),
-      ]));
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: transactions.length,
-      itemBuilder: (_, i) {
-        final tx = transactions[i];
-        final isIn = tx['type'] == 'in';
-        final qty = double.tryParse(tx['quantity']?.toString() ?? '0') ?? 0;
-        final dateStr = tx['createdAt']?.toString().substring(0, 16) ?? '';
-        return Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 4)],
-          ),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: isIn ? Colors.green.shade50 : Colors.red.shade50,
-              child: Icon(isIn ? Icons.arrow_downward : Icons.arrow_upward,
-                  color: isIn ? Colors.green : Colors.red, size: 20),
-            ),
-            title: Text(tx['materialName'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-            subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(dateStr, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-              if (tx['notes'] != null && tx['notes'].toString().isNotEmpty)
-                Text(tx['notes'].toString(), style: const TextStyle(fontSize: 11, color: Colors.grey)),
-            ]),
-            trailing: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Text(
-                '${isIn ? '+' : '-'}${qty.toStringAsFixed(1)}',
-                style: TextStyle(color: isIn ? Colors.green : Colors.red, fontWeight: FontWeight.bold, fontSize: 15),
-              ),
-              Text(tx['unit'] ?? '', style: const TextStyle(fontSize: 10, color: Colors.grey)),
-            ]),
-          ),
-        );
-      },
     );
   }
 }
+
+class _CreateWarehouseSheet extends StatefulWidget {
+  const _CreateWarehouseSheet();
+
+  @override
+  State<_CreateWarehouseSheet> createState() => _CreateWarehouseSheetState();
+}
+
+class _CreateWarehouseSheetState extends State<_CreateWarehouseSheet> {
+  final _name = TextEditingController();
+  String _type = 'raw';
+  String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final result = await FactoryHubApi.createWarehouse(_name.text.trim(), _type);
+    if (!mounted) return;
+    if (result['error'] != null) {
+      setState(() => _error = result['error']);
+      return;
+    }
+    Navigator.pop(context, true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text("Yangi ombor", style: Theme.of(context).textTheme.titleLarge, textAlign: TextAlign.center),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _name,
+            decoration: InputDecoration(
+              labelText: 'Nomi',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _type,
+            items: const [
+              DropdownMenuItem(value: 'raw', child: Text('Xom ashyo')),
+              DropdownMenuItem(value: 'finished', child: Text('Tayyor mahsulot')),
+              DropdownMenuItem(value: 'spare_parts', child: Text('Ehtiyot qismlar')),
+              DropdownMenuItem(value: 'semi_finished', child: Text('Yarim tayyor mahsulot')),
+              DropdownMenuItem(value: 'sales', child: Text('Sotuv ombori')),
+              DropdownMenuItem(value: 'dealer', child: Text('Dilerlar')),
+            ],
+            onChanged: (v) => setState(() => _type = v ?? 'raw'),
+            decoration: InputDecoration(
+              labelText: 'Turi',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(_error!, style: TextStyle(color: Colors.red.shade700)),
+          ],
+          const SizedBox(height: 16),
+          ElevatedButton(onPressed: _submit, child: const Text('Saqlash')),
+        ],
+      ),
+    );
+  }
+}
+

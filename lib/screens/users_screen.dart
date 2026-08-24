@@ -1,436 +1,316 @@
-import 'package:factory_hub/screens/user_assign_screen.dart';
 import 'package:flutter/material.dart';
+
+import '../models/user.dart';
 import '../services/api_service.dart';
 
 class UsersScreen extends StatefulWidget {
   const UsersScreen({super.key});
+
   @override
   State<UsersScreen> createState() => _UsersScreenState();
 }
 
 class _UsersScreenState extends State<UsersScreen> {
-  List _users = [];
-  List _filtered = [];
+  List<dynamic> _users = [];
   bool _loading = true;
-  String? _error;
-  final _searchCtrl = TextEditingController();
-  String _selectedRole = 'all';
-
-  final String _callerRole = FactoryHubApi.role;
-  final int? _callerFactoryId = FactoryHubApi.factoryId;
 
   @override
   void initState() {
     super.initState();
     _load();
-    _searchCtrl.addListener(_filter);
-  }
-
-  @override
-  void dispose() {
-    _searchCtrl.dispose();
-    super.dispose();
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() => _loading = true);
     final result = await FactoryHubApi.getUsers();
-    if (result['error'] != null) {
-      setState(() { _error = result['error']; _loading = false; });
-    } else {
-      _users = (result['users'] as List?) ?? [];
-      _filter();
-      setState(() => _loading = false);
-    }
-  }
-
-  void _filter() {
-    final q = _searchCtrl.text.toLowerCase();
-    setState(() {
-      _filtered = _users.where((u) {
-        final matchSearch = q.isEmpty ||
-            (u['username'] ?? '').toLowerCase().contains(q) ||
-            (u['email'] ?? '').toLowerCase().contains(q);
-        final matchRole = _selectedRole == 'all' || u['role'] == _selectedRole;
-        return matchSearch && matchRole;
-      }).toList();
-    });
-  }
-
-  Future<void> _addUser() async {
-    final usernameCtrl = TextEditingController();
-    final emailCtrl = TextEditingController();
-    final passwordCtrl = TextEditingController();
-    String role = 'employee';
-    bool obscure = true;
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialog) => AlertDialog(
-          title: const Row(children: [
-            Icon(Icons.person_add, color: Color(0xFF1565C0)),
-            SizedBox(width: 8),
-            Text('Yangi xodim'),
-          ]),
-          content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(
-                controller: usernameCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Ism *',
-                  prefixIcon: Icon(Icons.person),
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: emailCtrl,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Email *',
-                  prefixIcon: Icon(Icons.email),
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: passwordCtrl,
-                obscureText: obscure,
-                decoration: InputDecoration(
-                  labelText: 'Parol * (min 6)',
-                  prefixIcon: const Icon(Icons.lock),
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    icon: Icon(obscure ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () => setDialog(() => obscure = !obscure),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              if (_callerRole == 'super_admin')
-                DropdownButtonFormField<String>(
-                  value: role,
-                  decoration: const InputDecoration(
-                    labelText: 'Rol',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'employee', child: Text('Xodim')),
-                    DropdownMenuItem(value: 'admin', child: Text('Zavod Admin')),
-                  ],
-                  onChanged: (v) => setDialog(() => role = v!),
-                )
-              else
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Row(children: [
-                    Icon(Icons.info, color: Colors.blue, size: 16),
-                    SizedBox(width: 8),
-                    Text('Xodim sifatida qoshiladi', style: TextStyle(color: Colors.blue, fontSize: 13)),
-                  ]),
-                ),
-            ]),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Bekor')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1565C0), foregroundColor: Colors.white),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Qoshish'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (ok != true) return;
-
-    if (usernameCtrl.text.trim().isEmpty || emailCtrl.text.trim().isEmpty || passwordCtrl.text.isEmpty) {
-      _showMsg('Barcha maydonlarni toldirib', isError: true);
-      return;
-    }
-    if (passwordCtrl.text.length < 6) {
-      _showMsg('Parol kamida 6 ta belgi', isError: true);
-      return;
-    }
-
-    final result = await FactoryHubApi.createUser({
-      'username': usernameCtrl.text.trim(),
-      'email': emailCtrl.text.trim(),
-      'password': passwordCtrl.text,
-      'role': _callerRole == 'super_admin' ? role : 'employee',
-      'factory_id': _callerFactoryId,
-    });
-
-    if (result['error'] != null) {
-      _showMsg(result['error'], isError: true);
-    } else {
-      _showMsg('Xodim qoshildi!');
-      _load();
-    }
-  }
-
-  Future<void> _openAssign(Map user) async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => UserAssignScreen(user: user)),
-    );
-    if (result == true) _load();
-  }
-
-  Future<void> _toggleBlock(Map user) async {
-    final isActive = user['isActive'] ?? true;
-    final action = isActive ? 'bloklash' : 'faollashtirish';
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('${user['username']} ni $action'),
-        content: Text('Bu amalni bajarishni tasdiqlaysizmi?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Bekor')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: isActive ? Colors.red : Colors.green,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(isActive ? 'Bloklash' : 'Faollashtirish'),
-          ),
-        ],
-      ),
-    );
-
-    if (ok != true) return;
-
-    final result = await FactoryHubApi.updateUser(
-      int.parse(user['id'].toString()),
-      {'is_active': !isActive},
-    );
-
-    if (result['error'] != null) {
-      _showMsg(result['error'], isError: true);
-    } else {
-      _showMsg(isActive ? 'Bloklandi' : 'Faollashtirildi');
-      _load();
-    }
-  }
-
-  void _showMsg(String msg, {bool isError = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: isError ? Colors.red : Colors.green),
+    setState(() {
+      _loading = false;
+      _users = result['users'] ?? [];
+    });
+  }
+
+  Future<void> _create() async {
+    final created = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => const _CreateUserSheet(),
     );
-  }
-
-  Color _roleColor(String? role) {
-    switch (role) {
-      case 'super_admin': return const Color(0xFF0D47A1);
-      case 'admin': return const Color(0xFF00897B);
-      default: return const Color(0xFF7B1FA2);
-    }
-  }
-
-  String _roleLabel(String? role) {
-    switch (role) {
-      case 'super_admin': return 'Super Admin';
-      case 'admin': return 'Zavod Admin';
-      default: return 'Xodim';
-    }
+    if (created == true) _load();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4F8),
-      appBar: AppBar(
-        title: const Text('Xodimlar', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1565C0),
-        foregroundColor: Colors.white,
-        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _load)],
-      ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addUser,
-        backgroundColor: const Color(0xFF1565C0),
-        foregroundColor: Colors.white,
+        onPressed: _create,
         icon: const Icon(Icons.person_add),
-        label: const Text('Xodim qoshish'),
+        label: const Text('Xodim'),
       ),
-      body: Column(children: [
-        Container(
-          color: Colors.white,
-          padding: const EdgeInsets.all(12),
-          child: Column(children: [
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView.builder(
+                padding: const EdgeInsets.all(12),
+                itemCount: _users.length,
+                itemBuilder: (_, i) {
+                  final u = _users[i];
+                  final warehouses = (u['warehouses'] as List<dynamic>? ?? [])
+                      .map((w) => w['name'])
+                      .join(', ');
+
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      leading: CircleAvatar(child: Text((u['username'] ?? '?')[0].toUpperCase())),
+                      title: Text(u['username'] ?? ''),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(u['role'].label),
+                          if (warehouses.isNotEmpty)
+                            Text('Omborlar: $warehouses',
+                                style: const TextStyle(fontSize: 11), maxLines: 2),
+                        ],
+                      ),
+                      trailing: u['isActive'] == true
+                          ? PopupMenuButton<String>(
+                              onSelected: (s) async {
+                                if (s == 'assign') {
+                                  final ok = await Navigator.push<bool>(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          _AssignSheet(userId: u['id'], username: u['username']),
+                                    ),
+                                  );
+                                  if (ok == true) _load();
+                                } else if (s == 'deactivate') {
+                                  await FactoryHubApi.deactivateUser(u['id']);
+                                  _load();
+                                }
+                              },
+                              itemBuilder: (_) => const [
+                                PopupMenuItem(value: 'assign', child: Text("Ombor biriktirish")),
+                                PopupMenuItem(value: 'deactivate', child: Text("Deaktivatsiya")),
+                              ],
+                            )
+                          : const Chip(label: Text('Faol emas', style: TextStyle(fontSize: 10))),
+                    ),
+                  );
+                },
+              ),
+            ),
+    );
+  }
+}
+
+class _AssignSheet extends StatefulWidget {
+  const _AssignSheet({required this.userId, required this.username});
+
+  final int userId;
+  final String username;
+
+  @override
+  State<_AssignSheet> createState() => _AssignSheetState();
+}
+
+class _AssignSheetState extends State<_AssignSheet> {
+  List<dynamic> _warehouses = [];
+  Set<int> _selected = {};
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    final allResult = await FactoryHubApi.getWarehouses();
+    final userResult = await FactoryHubApi.getUserDetail(widget.userId);
+    if (!mounted) return;
+
+    final assigned =
+        ((userResult['warehouses'] ?? []) as List<dynamic>).map((w) => w['id'] as int).toSet();
+
+    setState(() {
+      _warehouses = allResult['warehouses'] ?? [];
+      _selected = assigned;
+      _loading = false;
+    });
+  }
+
+  Future<void> _submit() async {
+    await FactoryHubApi.assignUser(userId: widget.userId, warehouseIds: _selected.toList());
+    if (!mounted) return;
+    Navigator.pop(context, true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('${widget.username} — omborlar')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _submit,
+        icon: const Icon(Icons.check),
+        label: const Text('Saqlash'),
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(12),
+              children: _warehouses.map<Widget>((w) {
+                final id = w['id'] as int;
+                return CheckboxListTile(
+                  value: _selected.contains(id),
+                  title: Text(w['name'] ?? ''),
+                  onChanged: (v) {
+                    setState(() {
+                      if (v == true) {
+                        _selected.add(id);
+                      } else {
+                        _selected.remove(id);
+                      }
+                    });
+                  },
+                );
+              }).toList(),
+            ),
+    );
+  }
+}
+
+class _CreateUserSheet extends StatefulWidget {
+  const _CreateUserSheet();
+
+  @override
+  State<_CreateUserSheet> createState() => _CreateUserSheetState();
+}
+
+class _CreateUserSheetState extends State<_CreateUserSheet> {
+  final _username = TextEditingController();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  String _role = AppRoles.warehouseKeeper;
+  String? _error;
+
+  @override
+  void dispose() {
+    _username.dispose();
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_username.text.trim().isEmpty ||
+        _email.text.trim().isEmpty ||
+        _password.text.isEmpty) {
+      setState(() => _error = 'Barcha maydonlar majburiy');
+      return;
+    }
+
+    final result = await FactoryHubApi.createUser({
+      'username': _username.text.trim(),
+      'email': _email.text.trim(),
+      'password': _password.text,
+      'role': _role,
+    });
+    if (!mounted) return;
+    if (result['error'] != null) {
+      setState(() => _error = result['error']);
+      return;
+    }
+    // Yaratilgandan keyin darhol ombor biriktirish ekraniga otamiz
+    final newUser = result['user'];
+    if (newUser is Map<String, dynamic>) {
+      if (!mounted) return;
+      Navigator.pop(context, false);
+      await Navigator.push<bool>(
+        this.context,
+        MaterialPageRoute(
+          builder: (_) => _AssignSheet(
+            userId: int.parse(newUser['id'].toString()),
+            username: newUser['username'].toString(),
+          ),
+        ),
+      );
+      if (!mounted) return;
+      Navigator.pop(this.context, true);
+    } else {
+      Navigator.pop(context, true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text("Yangi xodim", style: Theme.of(context).textTheme.titleLarge, textAlign: TextAlign.center),
+            const SizedBox(height: 12),
             TextField(
-              controller: _searchCtrl,
+              controller: _username,
               decoration: InputDecoration(
-                hintText: 'Ism yoki email...',
-                prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                suffixIcon: _searchCtrl.text.isNotEmpty
-                    ? IconButton(icon: const Icon(Icons.clear), onPressed: () { _searchCtrl.clear(); _filter(); })
-                    : null,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                labelText: "F.I.SH.",
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
-            const SizedBox(height: 8),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(children: [
-                _chip('all', 'Barchasi'),
-                const SizedBox(width: 8),
-                if (_callerRole == 'super_admin') ...[
-                  _chip('admin', 'Adminlar'),
-                  const SizedBox(width: 8),
-                ],
-                _chip('employee', 'Xodimlar'),
-              ]),
-            ),
-          ]),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          child: Row(children: [
-            Text('Jami: ${_filtered.length}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
-            const Spacer(),
-            Text(
-              'Faol: ${_filtered.where((u) => u['isActive'] == true).length} | Bloklangan: ${_filtered.where((u) => u['isActive'] == false).length}',
-              style: const TextStyle(color: Colors.grey, fontSize: 12),
-            ),
-          ]),
-        ),
-        Expanded(
-          child: _loading
-              ? const Center(child: CircularProgressIndicator())
-              : _error != null
-              ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            const Icon(Icons.error_outline, size: 50, color: Colors.red),
-            const SizedBox(height: 10),
-            Text(_error!, style: const TextStyle(color: Colors.red)),
-            ElevatedButton(onPressed: _load, child: const Text('Qayta')),
-          ]))
-              : _filtered.isEmpty
-              ? const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(Icons.people_outline, size: 70, color: Colors.grey),
-            SizedBox(height: 12),
-            Text('Xodimlar topilmadi', style: TextStyle(color: Colors.grey)),
-          ]))
-              : RefreshIndicator(
-            onRefresh: _load,
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 80),
-              itemCount: _filtered.length,
-              itemBuilder: (_, i) => _userCard(_filtered[i]),
-            ),
-          ),
-        ),
-      ]),
-    );
-  }
-
-  Widget _chip(String value, String label) {
-    final selected = _selectedRole == value;
-    return GestureDetector(
-      onTap: () { setState(() => _selectedRole = value); _filter(); },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFF1565C0) : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(label, style: TextStyle(
-          color: selected ? Colors.white : Colors.grey.shade700,
-          fontSize: 13, fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-        )),
-      ),
-    );
-  }
-
-  Widget _userCard(Map user) {
-    final role = user['role'] as String?;
-    final color = _roleColor(role);
-    final isActive = user['isActive'] ?? true;
-    final username = user['username'] ?? '?';
-    print('Building card for user: $username, role: $role, active: $isActive');
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6)],
-        border: isActive ? null : Border.all(color: Colors.red.shade100),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        leading: Stack(children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: isActive ? color.withValues(alpha: 0.1) : Colors.grey.shade100,
-            child: Text(username[0].toUpperCase(),
-                style: TextStyle(color: isActive ? color : Colors.grey, fontWeight: FontWeight.bold, fontSize: 18)),
-          ),
-          if (!isActive)
-            Positioned(right: 0, bottom: 0,
-                child: Container(
-                  width: 14, height: 14,
-                  decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                  child: const Icon(Icons.block, color: Colors.white, size: 10),
-                )),
-        ]),
-        title: Row(children: [
-          Text(username, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isActive ? Colors.black : Colors.grey)),
-          if (!isActive) ...[
-            const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(4)),
-              child: const Text('Bloklangan', style: TextStyle(color: Colors.red, fontSize: 9)),
-            ),
-          ],
-        ]),
-        subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(user['email'] ?? '', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-          const SizedBox(height: 4),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10)),
-            child: Text(_roleLabel(role), style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
-          ),
-        ]),
-        trailing: PopupMenuButton(
-          icon: const Icon(Icons.more_vert, color: Colors.grey),
-          itemBuilder: (_) => [
-            if (role.toString() == "employee")
-              const PopupMenuItem(
-                value: 'assign',
-                child: Row(children: [
-                  Icon(Icons.assignment_ind, color: Color(0xFF1565C0), size: 18),
-                  SizedBox(width: 8),
-                  Text('Bolim/Ombor biriktirish'),
-                ]),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _email,
+              keyboardType: TextInputType.emailAddress,
+              decoration: InputDecoration(
+                labelText: 'Email',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
-            PopupMenuItem(
-              value: 'toggle',
-              child: Row(children: [
-                Icon(isActive ? Icons.block : Icons.check_circle,
-                    color: isActive ? Colors.red : Colors.green, size: 18),
-                const SizedBox(width: 8),
-                Text(isActive ? 'Bloklash' : 'Faollashtirish'),
-              ]),
             ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _password,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: 'Parol',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _role,
+              items: const [
+                DropdownMenuItem(value: AppRoles.admin, child: Text('Admin')),
+                DropdownMenuItem(value: AppRoles.operationsManager, child: Text('Ish boshqaruvchi')),
+                DropdownMenuItem(value: AppRoles.warehouseKeeper, child: Text('Omborchi')),
+                DropdownMenuItem(value: AppRoles.warehouseController, child: Text("Ombor nazoratchisi")),
+                DropdownMenuItem(value: AppRoles.director, child: Text('Direktor')),
+              ],
+              onChanged: (v) => setState(() => _role = v ?? AppRoles.warehouseKeeper),
+              decoration: InputDecoration(
+                labelText: 'Rol',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(_error!, style: TextStyle(color: Colors.red.shade700)),
+            ],
+            const SizedBox(height: 16),
+            ElevatedButton(onPressed: _submit, child: const Text("Qo'shish")),
           ],
-          onSelected: (v) {
-            if (v == 'toggle') _toggleBlock(user);
-            if (v == 'assign') _openAssign(user);
-          },
         ),
       ),
     );
   }
 }
+

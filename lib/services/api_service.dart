@@ -1,6 +1,8 @@
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+
 import 'auth_storage.dart';
 
 class FactoryHubApi {
@@ -12,12 +14,12 @@ class FactoryHubApi {
 
   static String? get token => _token;
   static Map<String, dynamic>? get currentUser => _currentUser;
-  static String get role => _currentUser?['role'] ?? 'employee';
+  static String get role => _currentUser?['role'] ?? '';
   static int? get userId => int.tryParse(_currentUser?['id']?.toString() ?? '');
-  static int? get factoryId => _currentUser?['factoryId'] as int?;
+  static String get username => _currentUser?['username']?.toString() ?? '';
   static bool get isLoggedIn => _token != null;
 
-  // Ilova ishga tushganda sessiyani tiklash
+  // ─── Sessiya ────────────────────────────────────────────────
   static Future<bool> restoreSession() async {
     try {
       final token = await AuthStorage.getToken();
@@ -33,7 +35,6 @@ class FactoryHubApi {
     }
   }
 
-  // Login
   static Future<Map<String, dynamic>> login(String email, String password) async {
     final result = await _post(
       '/login',
@@ -43,7 +44,6 @@ class FactoryHubApi {
     if (result['error'] == null) {
       _token = result['token'] as String?;
       _currentUser = result['user'] as Map<String, dynamic>?;
-      // Persistent saqlash
       if (_token != null && _currentUser != null) {
         await AuthStorage.saveSession(_token!, _currentUser!);
       }
@@ -51,112 +51,90 @@ class FactoryHubApi {
     return result;
   }
 
-  // Chiqish
   static Future<void> logout() async {
     _token = null;
     _currentUser = null;
     await AuthStorage.clearSession();
   }
 
-  // Setup
   static Future<Map<String, dynamic>> setupSuperAdmin(
-    String username, String email, String password, String secret) async =>
+    String username,
+    String email,
+    String password,
+    String secret,
+  ) =>
       _post('/setup', {
-        'username': username, 'email': email,
-        'password': password, 'secret_key': secret,
+        'username': username,
+        'email': email,
+        'password': password,
+        'secret_key': secret,
       }, requiresAuth: false);
 
-  // ─── Dashboard ────────────────────────────────────────────
-  static Future<Map<String, dynamic>> getDashboard() async =>
-      _get('/dashboard/summary');
+  // ─── Dashboard / statistika ────────────────────────────────
+  static Future<Map<String, dynamic>> getDashboard() async => _get('/dashboard/summary');
 
-  static Future<Map<String, dynamic>> getSuperAdminDashboard() async =>
-      _get('/dashboard/super_admin');
+  // ─── Katalog (exim_raw) ────────────────────────────────────
+  static Future<Map<String, dynamic>> getRawMaterials() async => _get('/catalog/raw-materials');
 
-  static Future<Map<String, dynamic>> getFactoryAdminDashboard() async =>
-      _get('/dashboard/factory_admin');
+  static Future<Map<String, dynamic>> getProducts({String? search}) async =>
+      _get('/catalog/products${search == null || search.isEmpty ? '' : '?search=$search'}');
 
-  // ─── Factories ────────────────────────────────────────────
-  static Future<Map<String, dynamic>> getFactories() async =>
-      _get('/factories');
+  static Future<Map<String, dynamic>> getPartners() async => _get('/catalog/partners');
 
-  static Future<Map<String, dynamic>> createFactory({
-    required String name, String? address,
-  }) async => _post('/factories', {'name': name, 'address': address});
+  // ─── Omborlar va zaxira ────────────────────────────────────
+  static Future<Map<String, dynamic>> getWarehouses() async => _get('/warehouses');
 
-  static Future<Map<String, dynamic>> updateFactory(int id, {
-    String? name, String? address, bool? isActive,
-  }) async => _put('/factories/$id', {
-    if (name != null) 'name': name,
-    if (address != null) 'address': address,
-    if (isActive != null) 'isActive': isActive,
-  });
+  static Future<Map<String, dynamic>> createWarehouse(String name, String type) async =>
+      _post('/warehouses', {'name': name, 'type': type});
 
-  // ─── Materiallar ──────────────────────────────────────────
-  static Future<Map<String, dynamic>> getMaterials() async =>
-      _get('/materials?user_id=$userId&role=$role');
-
-  static Future<Map<String, dynamic>> createMaterial(Map<String, dynamic> data) async =>
-      _post('/materials', data);
-
-      static Future<Map<String, dynamic>> updateMaterial(int id, Map<String, dynamic> data) async =>
-      _put('/materials/$id', data);
-
-  static Future<Map<String, dynamic>> deleteMaterial(int id) async =>
-      _delete('/materials/$id');
-
-  // ─── Omborlar ─────────────────────────────────────────────
-  static Future<Map<String, dynamic>> getWarehouses() async =>
-      _get('/warehouses');
+  static Future<Map<String, dynamic>> getWarehouseDetail(int id) async => _get('/warehouses/$id');
 
   static Future<Map<String, dynamic>> addTransaction(Map<String, dynamic> data) async =>
       _post('/warehouse/transaction', data);
 
-  static Future<Map<String, dynamic>> getWarehouseDetail(int id) async =>
-      _get('/warehouses/$id');
+  static Future<Map<String, dynamic>> getStock({int? warehouseId}) async =>
+      _get('/stock${warehouseId == null ? '' : '?warehouse_id=$warehouseId'}');
 
-  // ─── BOM ──────────────────────────────────────────────────
-  static Future<Map<String, dynamic>> getBoms() async => _get('/boms');
+  // ─── Rejalar ───────────────────────────────────────────────
+  static Future<Map<String, dynamic>> getPlans({String? status}) async =>
+      _get('/plans${status == null ? '' : '?status=$status'}');
 
-  static Future<Map<String, dynamic>> getBomDetail(int id) async => _get('/boms/$id');
+  static Future<Map<String, dynamic>> createPlan(Map<String, dynamic> data) async =>
+      _post('/plans', data);
 
-  static Future<Map<String, dynamic>> createBom(Map<String, dynamic> data) async =>
-      _post('/boms', data);
+  static Future<Map<String, dynamic>> updatePlanStatus(int id, String status) async =>
+      _put('/plans/$id', {'status': status});
 
-  static Future<Map<String, dynamic>> addIngredient(int bomId, Map<String, dynamic> data) async =>
-      _post('/boms/$bomId', data);
+  // ─── Ta'minotchi buyurtmalari ──────────────────────────────
+  static Future<Map<String, dynamic>> getSupplierOrders({String? status}) async =>
+      _get('/supplier-orders${status == null ? '' : '?status=$status'}');
 
-  static Future<Map<String, dynamic>> deleteIngredient(int bomId, int ingredientId) async =>
-      _delete('/boms/$bomId/ingredients/$ingredientId');
+  static Future<Map<String, dynamic>> createSupplierOrder(Map<String, dynamic> data) async =>
+      _post('/supplier-orders', data);
 
-  static Future<Map<String, dynamic>> deleteBom(int id) async =>
-      _delete('/boms/$id');
+  static Future<Map<String, dynamic>> updateSupplierOrderStatus(int id, String status) async =>
+      _put('/supplier-orders/$id', {'status': status});
 
-  // ─── Ishlab chiqarish ─────────────────────────────────────
+  // ─── Ishlab chiqarish ──────────────────────────────────────
+  static Future<Map<String, dynamic>> getNorms(String barcode) async =>
+      _get('/production/norms/$barcode');
+
   static Future<Map<String, dynamic>> startProduction(Map<String, dynamic> data) async =>
       _post('/production/start', data);
 
-  static Future<Map<String, dynamic>> updateProduction(int id, Map<String, dynamic> data) async =>
+  static Future<Map<String, dynamic>> updateBatch(int id, Map<String, dynamic> data) async =>
       _put('/production/$id', data);
 
-  // ─── Hisobotlar ───────────────────────────────────────────
-  static Future<Map<String, dynamic>> getProductionReport(String period) async =>
-      _get('/reports/production?period=$period');
+  static Future<Map<String, dynamic>> getBatches({String? status}) async =>
+      _get('/reports/production${status == null ? '' : '?status=$status'}');
 
-  static Future<Map<String, dynamic>> getStockReport() async =>
-      _get('/reports/stock');
-
-  static Future<Map<String, dynamic>> getForecastReport() async =>
-      _get('/reports/forecast');
-
-  // ─── Ogohlantirishlar ─────────────────────────────────────
+  // ─── Ogohlantirishlar ──────────────────────────────────────
   static Future<Map<String, dynamic>> getAlerts() async => _get('/alerts');
 
-  static Future<Map<String, dynamic>> generateAlerts() async =>
-      _post('/alerts', {});
-
-  // ─── Foydalanuvchilar ─────────────────────────────────────
+  // ─── Foydalanuvchilar ──────────────────────────────────────
   static Future<Map<String, dynamic>> getUsers() async => _get('/users');
+
+  static Future<Map<String, dynamic>> getUserDetail(int id) async => _get('/users/$id');
 
   static Future<Map<String, dynamic>> createUser(Map<String, dynamic> data) async =>
       _post('/users', data);
@@ -164,32 +142,16 @@ class FactoryHubApi {
   static Future<Map<String, dynamic>> updateUser(int id, Map<String, dynamic> data) async =>
       _put('/users/$id', data);
 
-      static Future<Map<String, dynamic>> getDepartments() async =>
-      _get('/departments');
-
-  static Future<Map<String, dynamic>> createDepartment(Map<String, dynamic> data) async =>
-      _post('/departments', data);
-
-  static Future<Map<String, dynamic>> getUserDetail(int id) async =>
-      _get('/users/$id');
+  static Future<Map<String, dynamic>> deactivateUser(int id) async => _delete('/users/$id');
 
   static Future<Map<String, dynamic>> assignUser({
     required int userId,
-    required List<int> departmentIds,
     required List<int> warehouseIds,
   }) async =>
       _post('/users/assign', {
         'user_id': userId,
-        'department_ids': departmentIds,
         'warehouse_ids': warehouseIds,
       });
-
-  // ─── Kategoriyalar ────────────────────────────────────────
-  static Future<Map<String, dynamic>> getCategories() async =>
-      _get('/categories');
-
-  static Future<Map<String, dynamic>> getProductTypes() async =>
-      _get('/product-types');
 
   // ═══════════════════════════════════════════════════════════
   // PRIVATE HTTP METHODS
@@ -216,7 +178,6 @@ class FactoryHubApi {
       final data = jsonDecode(response.body);
       if (data is Map<String, dynamic>) {
         if (response.statusCode == 401) {
-          // Token muddati o'tgan — sessiyani tozalash
           logout();
           return {'error': 'Sessiya tugadi. Qayta kiring.', 'unauthorized': true};
         }
@@ -227,56 +188,74 @@ class FactoryHubApi {
       }
       return {'success': true, 'data': data};
     } catch (_) {
-      return {'error': 'Javob o\'qishda xatolik'};
+      return {'error': "Javob o'qishda xatolik"};
     }
   }
 
   static Map<String, dynamic> _handleError(Object e) {
     if (kDebugMode) print('API xatolik: $e');
     if (e.toString().contains('TimeoutException')) {
-      return {'error': 'Server javob bermadi. Qayta urinib ko\'ring.'};
+      return {'error': 'Server javob bermadi. Qayta urinib koring.'};
     }
     return {'error': 'Tarmoq xatosi. Internetni tekshiring.'};
   }
 
-  static Future<Map<String, dynamic>> _get(String path, {bool requiresAuth = true}) async {
+  static Future<Map<String, dynamic>> _get(
+    String path, {
+    bool requiresAuth = true,
+  }) async {
     try {
-      final r = await http.get(
-        Uri.parse('$baseUrl$path'),
-        headers: _headers(requiresAuth: requiresAuth),
-      ).timeout(timeout);
+      final r = await http
+          .get(Uri.parse('$baseUrl$path'), headers: _headers(requiresAuth: requiresAuth))
+          .timeout(timeout);
       return _parseResponse(r);
-    } catch (e) { return _handleError(e); }
+    } catch (e) {
+      return _handleError(e);
+    }
   }
 
-  static Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body, {bool requiresAuth = true}) async {
+  static Future<Map<String, dynamic>> _post(
+    String path,
+    Map<String, dynamic> body, {
+    bool requiresAuth = true,
+  }) async {
     try {
-      final r = await http.post(
-        Uri.parse('$baseUrl$path'),
-        headers: _headers(requiresAuth: requiresAuth),
-        body: jsonEncode(body),
-      ).timeout(timeout);
+      final r = await http
+          .post(
+            Uri.parse('$baseUrl$path'),
+            headers: _headers(requiresAuth: requiresAuth),
+            body: jsonEncode(body),
+          )
+          .timeout(timeout);
       return _parseResponse(r);
-    } catch (e) { return _handleError(e); }
+    } catch (e) {
+      return _handleError(e);
+    }
   }
 
   static Future<Map<String, dynamic>> _put(String path, Map<String, dynamic> body) async {
     try {
-      final r = await http.put(
-        Uri.parse('$baseUrl$path'),
-        headers: _headers(),
-        body: jsonEncode(body),
-      ).timeout(timeout);
+      final r = await http
+          .put(
+            Uri.parse('$baseUrl$path'),
+            headers: _headers(),
+            body: jsonEncode(body),
+          )
+          .timeout(timeout);
       return _parseResponse(r);
-    } catch (e) { return _handleError(e); }
+    } catch (e) {
+      return _handleError(e);
+    }
   }
+
   static Future<Map<String, dynamic>> _delete(String path) async {
     try {
-      final r = await http.delete(
-        Uri.parse('$baseUrl$path'),
-        headers: _headers(),
-      ).timeout(timeout);
+      final r = await http
+          .delete(Uri.parse('$baseUrl$path'), headers: _headers())
+          .timeout(timeout);
       return _parseResponse(r);
-    } catch (e) { return _handleError(e); }
+    } catch (e) {
+      return _handleError(e);
+    }
   }
 }
