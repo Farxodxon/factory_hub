@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/user.dart';
+import '../responsive/responsive_navigation.dart';
 import '../services/api_service.dart';
 import 'alerts_screen.dart';
 import 'catalog_screen.dart';
@@ -22,98 +23,81 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
-  int _index = 0;
+  int _selectedIndex = 0;
 
-  String get _role => FactoryHubApi.role;
+  late final List<_NavEntry> _entries;
 
-  List<Widget> get _screens => [
-        const DashboardHome(),
-        const WarehousesScreen(),
-        const CatalogScreen(),
-        const PlansScreen(),
-        const ProductionScreen(),
-        const SupplierOrdersScreen(),
-        const ReportsScreen(),
-        const AlertsScreen(),
-        if (_role.canManageThresholds) const ThresholdsScreen(),
-        if (_role.canManageUsers) const UsersScreen(),
-      ];
+  @override
+  void initState() {
+    super.initState();
+    _entries = _buildEntries();
+  }
+
+  List<_NavEntry> _buildEntries() {
+    final role = FactoryHubApi.role;
+    final entries = <_NavEntry>[
+      _NavEntry(const NavItem(index: 0, icon: Icons.dashboard, label: 'Bosh oyna'), const DashboardHome()),
+      _NavEntry(const NavItem(index: 1, icon: Icons.warehouse, label: 'Omborlar'), const WarehousesScreen()),
+      _NavEntry(const NavItem(index: 2, icon: Icons.category, label: 'Katalog'), const CatalogScreen()),
+    ];
+
+    if (!role.isDirector) {
+      entries.add(_NavEntry(const NavItem(index: 3, icon: Icons.assignment, label: 'Rejalar'), const PlansScreen()));
+      entries.add(_NavEntry(const NavItem(index: 4, icon: Icons.factory, label: 'Ishlab chiqarish'), const ProductionScreen()));
+    }
+    if (role.canControlWarehouses) {
+      entries.add(_NavEntry(const NavItem(index: 5, icon: Icons.local_shipping, label: "Ta'minotchi buyurtmalari"), const SupplierOrdersScreen()));
+    }
+
+    entries.add(_NavEntry(const NavItem(index: 6, icon: Icons.bar_chart, label: 'Hisobotlar'), const ReportsScreen()));
+    entries.add(_NavEntry(const NavItem(index: 7, icon: Icons.notifications_active, label: 'Ogohlantirishlar'), const AlertsScreen()));
+
+    if (role.canManageThresholds) {
+      entries.add(_NavEntry(const NavItem(index: 8, icon: Icons.tune, label: 'Kritik darajalar'), const ThresholdsScreen()));
+    }
+    if (role.canManageUsers) {
+      entries.add(_NavEntry(const NavItem(index: 9, icon: Icons.people, label: 'Foydalanuvchilar'), const UsersScreen()));
+    }
+
+    return entries;
+  }
+
+  void _onNavSelected(int displayIndex) {
+    if (displayIndex < _entries.length) {
+      setState(() => _selectedIndex = displayIndex);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final screens = _screens;
-    if (_index >= screens.length) _index = 0;
+    if (_selectedIndex >= _entries.length) _selectedIndex = 0;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_titleFor(_index)),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+    return AdaptiveNavigation(
+      selectedIndex: _selectedIndex,
+      onSelected: _onNavSelected,
+      items: _entries.map((e) => e.navItem).toList(),
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _entries.map((e) => e.screen).toList(),
       ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            UserAccountsDrawerHeader(
-              accountName: Text(FactoryHubApi.username),
-              accountEmail: Text(_role.label),
-              currentAccountPicture: CircleAvatar(
-                backgroundColor: Colors.white,
-                child: Icon(Icons.precision_manufacturing, color: const Color(0xFF1565C0)),
-              ),
-              decoration: const BoxDecoration(color: Color(0xFF1565C0)),
-            ),
-            _item(0, Icons.dashboard, 'Bosh oyna'),
-            _item(1, Icons.warehouse, 'Omborlar'),
-            _item(2, Icons.category, 'Katalog'),
-            if (!_role.isDirector) _item(3, Icons.assignment, 'Rejalar'),
-            if (!_role.isDirector) _item(4, Icons.factory, 'Ishlab chiqarish'),
-            if (_role.canControlWarehouses)
-              _item(5, Icons.local_shipping, "Ta'minotchi buyurtmalari"),
-            _item(6, Icons.bar_chart, 'Hisobotlar'),
-            _item(7, Icons.notifications_active, 'Ogohlantirishlar'),
-            if (_role.canManageThresholds)
-              _item(8, Icons.tune, 'Kritik darajalar'),
-            if (_role.canManageUsers) _item(9, Icons.people, 'Foydalanuvchilar'),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.logout),
-              title: const Text('Chiqish'),
-              onTap: () async {
-                await FactoryHubApi.logout();
-                if (!mounted) return;
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-      body: IndexedStack(index: _index, children: screens),
+      username: FactoryHubApi.username,
+      roleLabel: FactoryHubApi.role.label,
+      onLogout: () async {
+        await FactoryHubApi.logout();
+        if (!mounted) return;
+        final ctx = context;
+        if (!ctx.mounted) return;
+        Navigator.pushReplacement(
+          ctx,
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+        );
+      },
     );
   }
+}
 
-  Widget _item(int i, IconData icon, String label) => ListTile(
-        leading: Icon(icon),
-        title: Text(label),
-        selected: _index == i,
-        onTap: () {
-          setState(() => _index = i);
-          Navigator.pop(context);
-        },
-      );
-
-  String _titleFor(int i) => [
-        'Bosh oyna',
-        'Omborlar',
-        'Katalog',
-        'Rejalar',
-        'Ishlab chiqarish',
-        "Ta'minotchi buyurtmalari",
-        'Hisobotlar',
-        'Ogohlantirishlar',
-        'Kritik darajalar',
-        'Foydalanuvchilar'
-      ][i];
+class _NavEntry {
+  final NavItem navItem;
+  final Widget screen;
+  const _NavEntry(this.navItem, this.screen);
 }

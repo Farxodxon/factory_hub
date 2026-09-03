@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../responsive/app_breakpoints.dart';
 import '../services/api_service.dart';
+import '../theme/colors.dart';
 
 class ThresholdsScreen extends StatefulWidget {
   const ThresholdsScreen({super.key});
@@ -33,22 +35,19 @@ class _ThresholdsScreenState extends State<ThresholdsScreen> {
   }
 
   Future<void> _edit(Map<String, dynamic> item) async {
-    final controller =
-        TextEditingController(text: item['minQty']?.toString() ?? '');
+    final controller = TextEditingController(text: item['minQty']?.toString() ?? '');
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Minimal chegarani o\'zgartirish'),
+        title: const Text("Minimal chegarani o'zgartirish"),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(item['name'] ?? '',
-                style: const TextStyle(fontSize: 13, color: Colors.black54)),
+            Text(item['name'] ?? '', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
             const SizedBox(height: 12),
             TextField(
               controller: controller,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
                 labelText: 'Minimal qoldiq (dona)',
                 border: OutlineInputBorder(),
@@ -57,12 +56,10 @@ class _ThresholdsScreenState extends State<ThresholdsScreen> {
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Bekor'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Bekor')),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
             child: const Text('Saqlash'),
           ),
         ],
@@ -71,13 +68,11 @@ class _ThresholdsScreenState extends State<ThresholdsScreen> {
     if (ok != true || !mounted) return;
     final value = num.tryParse(controller.text.replaceAll(',', '.'));
     if (value == null || value < 0) return;
-    final result =
-        await FactoryHubApi.updateThreshold(item['id'] as int, value);
+    final result = await FactoryHubApi.updateThreshold(item['id'] as int, value);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(result['error'] != null
-          ? 'Xato: ${result['error']}'
-          : 'Chegara yangilandi'),
+      content: Text(result['error'] != null ? 'Xato: ${result['error']}' : 'Chegara yangilandi'),
+      backgroundColor: result['error'] != null ? AppColors.statusCritical : AppColors.statusOk,
     ));
     if (result['error'] == null) _load();
   }
@@ -89,11 +84,9 @@ class _ThresholdsScreenState extends State<ThresholdsScreen> {
     final query = _search.trim().toLowerCase();
     final filtered = query.isEmpty
         ? _items
-        : _items
-            .where((e) =>
-                (e['name'] ?? '').toString().toLowerCase().contains(query) ||
-                (e['refKey'] ?? '').toString().contains(query))
-            .toList();
+        : _items.where((e) =>
+            (e['name'] ?? '').toString().toLowerCase().contains(query) ||
+            (e['refKey'] ?? '').toString().contains(query)).toList();
 
     final lowCount = filtered.where((e) {
       final bal = num.tryParse('${e['balance']}') ?? 0;
@@ -101,88 +94,121 @@ class _ThresholdsScreenState extends State<ThresholdsScreen> {
       return bal < min;
     }).length;
 
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-            child: TextField(
-              onChanged: (v) => setState(() => _search = v),
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search),
-                hintText: 'Nom yoki barcode bo\'yicha izlash',
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10)),
-                isDense: true,
+    final isDesktop = AppBreakpoints.isDesktop(context);
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+          child: TextField(
+            onChanged: (v) => setState(() => _search = v),
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.search),
+              hintText: "Nom yoki barcode bo'yicha izlash",
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              isDense: true,
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: Row(
+            children: [
+              Text('Jami: ${filtered.length}'),
+              const Spacer(),
+              if (lowCount > 0)
+                Chip(
+                  avatar: const Icon(Icons.warning_amber_rounded, size: 18, color: AppColors.statusCritical),
+                  label: Text('$lowCount kam', style: const TextStyle(fontSize: 12)),
+                  backgroundColor: AppColors.statusCritical.withValues(alpha: 0.1),
+                  visualDensity: VisualDensity.compact,
+                ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: filtered.isEmpty
+              ? const Center(child: Text('Yozuv yo\'q'))
+              : isDesktop
+                  ? _buildTable(filtered)
+                  : _buildList(filtered),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildList(List<dynamic> items) {
+    return ListView.builder(
+      padding: const EdgeInsets.only(bottom: 16),
+      itemCount: items.length,
+      itemBuilder: (context, i) {
+        final e = items[i];
+        final balance = num.tryParse('${e['balance']}') ?? 0;
+        final minQty = num.tryParse('${e['minQty']}') ?? 0;
+        final isLow = balance < minQty;
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          color: isLow ? AppColors.statusCritical.withValues(alpha: 0.06) : null,
+          child: ListTile(
+            leading: Icon(
+              e['itemType'] == 'product' ? Icons.inventory_2 : Icons.grain,
+              color: isLow ? AppColors.statusCritical : AppColors.statusOk,
+            ),
+            title: Text('${e['name']}', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14)),
+            subtitle: Text(
+              'Qoldiq: ${_fmt(balance)} | Chegara: ${_fmt(minQty)}',
+              style: TextStyle(
+                fontSize: 12,
+                color: isLow ? AppColors.statusCritical : AppColors.textSecondary,
+                fontWeight: isLow ? FontWeight.bold : FontWeight.normal,
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              children: [
-                Text('Jami: ${filtered.length}'),
-                const Spacer(),
-                if (lowCount > 0)
-                  Chip(
-                    avatar: const Icon(Icons.warning_amber_rounded,
-                        size: 18, color: Colors.red),
-                    label: Text('$lowCount kam'),
-                    backgroundColor: Colors.red.shade50,
-                    visualDensity: VisualDensity.compact,
-                  ),
-              ],
+            trailing: IconButton(
+              icon: const Icon(Icons.edit, size: 20),
+              tooltip: "Chegarani o'zgartirish",
+              onPressed: () => _edit(e),
             ),
           ),
-          Expanded(
-            child: filtered.isEmpty
-                ? const Center(child: Text('Yozuv yoq'))
-                : ListView.builder(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    itemCount: filtered.length,
-                    itemBuilder: (context, i) {
-                      final e = filtered[i];
-                      final balance = num.tryParse('${e['balance']}') ?? 0;
-                      final minQty = num.tryParse('${e['minQty']}') ?? 0;
-                      final isLow = balance < minQty;
-                      return Card(
-                        margin: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
-                        color: isLow ? Colors.red.shade50 : null,
-                        child: ListTile(
-                          leading: Icon(
-                            e['itemType'] == 'product'
-                                ? Icons.inventory_2
-                                : Icons.grain,
-                            color: isLow ? Colors.red : Colors.green,
-                          ),
-                          title: Text(
-                            '${e['name']}',
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 14),
-                          ),
-                          subtitle: Text(
-                            'Qoldiq: ${_fmt(balance)} | Chegara: ${_fmt(minQty)}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isLow ? Colors.red.shade700 : null,
-                              fontWeight:
-                                  isLow ? FontWeight.bold : FontWeight.normal,
-                            ),
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.edit, size: 20),
-                            tooltip: "Chegarani o'zgartirish",
-                            onPressed: () => _edit(e),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTable(List<dynamic> items) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: DataTable(
+        columns: const [
+          DataColumn(label: Text('Nomi')),
+          DataColumn(label: Text('Turi')),
+          DataColumn(label: Text('Qoldiq'), numeric: true),
+          DataColumn(label: Text('Chegara'), numeric: true),
+          DataColumn(label: Text('Holat')),
+          DataColumn(label: Text('Amal')),
         ],
+        rows: items.map((e) {
+          final balance = num.tryParse('${e['balance']}') ?? 0;
+          final minQty = num.tryParse('${e['minQty']}') ?? 0;
+          final isLow = balance < minQty;
+          return DataRow(
+            color: WidgetStateProperty.resolveWith((_) => isLow ? AppColors.statusCritical.withValues(alpha: 0.06) : null),
+            cells: [
+              DataCell(Text('${e['name']}', maxLines: 2)),
+              DataCell(Text(e['itemType'] == 'product' ? 'Mahsulot' : 'Xom ashyo')),
+              DataCell(Text('${_fmt(balance)}', style: TextStyle(fontWeight: FontWeight.bold, color: isLow ? AppColors.statusCritical : null))),
+              DataCell(Text('${_fmt(minQty)}')),
+              DataCell(Chip(
+                label: Text(isLow ? 'Kam' : 'Yetarli', style: const TextStyle(fontSize: 11)),
+                backgroundColor: isLow ? AppColors.statusCritical.withValues(alpha: 0.15) : AppColors.statusOk.withValues(alpha: 0.15),
+                visualDensity: VisualDensity.compact,
+              )),
+              DataCell(IconButton(
+                icon: const Icon(Icons.edit, size: 20),
+                onPressed: () => _edit(e),
+              )),
+            ],
+          );
+        }).toList(),
       ),
     );
   }

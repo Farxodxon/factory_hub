@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'screens/home_shell.dart';
 import 'screens/login_screen.dart';
 import 'services/api_service.dart';
+import 'theme/theme.dart';
+import 'theme/colors.dart';
 
 void main() {
   runApp(const FactoryHubApp());
@@ -16,10 +18,7 @@ class FactoryHubApp extends StatelessWidget {
     return MaterialApp(
       title: 'FactoryHub',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1565C0)),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.light,
       home: const SplashScreen(),
     );
   }
@@ -54,7 +53,7 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      backgroundColor: Color(0xFF1565C0),
+      backgroundColor: AppColors.primary,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

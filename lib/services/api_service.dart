@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 
 import 'auth_storage.dart';
 
@@ -85,10 +87,48 @@ class FactoryHubApi {
   // ─── Omborlar va zaxira ────────────────────────────────────
   static Future<Map<String, dynamic>> getWarehouses() async => _get('/warehouses');
 
-  static Future<Map<String, dynamic>> createWarehouse(String name, String type) async =>
-      _post('/warehouses', {'name': name, 'type': type});
+  static Future<Map<String, dynamic>> createWarehouse({
+    required String name,
+    required String type,
+    bool canAnalyze = true,
+    bool canTransfer = false,
+    bool canIncome = true,
+    bool canExpense = true,
+    List<int> transferTo = const [],
+  }) async =>
+      _post('/warehouses', {
+        'name': name,
+        'type': type,
+        'canAnalyze': canAnalyze,
+        'canTransfer': canTransfer,
+        'canIncome': canIncome,
+        'canExpense': canExpense,
+        'transferTo': transferTo,
+      });
+
+  static Future<Map<String, dynamic>> updateWarehouse({
+    required int id,
+    required bool canAnalyze,
+    required bool canTransfer,
+    required bool canIncome,
+    required bool canExpense,
+    required List<int> transferTo,
+  }) async =>
+      _put('/warehouses/$id', {
+        'canAnalyze': canAnalyze,
+        'canTransfer': canTransfer,
+        'canIncome': canIncome,
+        'canExpense': canExpense,
+        'transferTo': transferTo,
+      });
+
+  static Future<Map<String, dynamic>> deleteWarehouse(int id) async =>
+      _delete('/warehouses/$id');
 
   static Future<Map<String, dynamic>> getWarehouseDetail(int id) async => _get('/warehouses/$id');
+
+  static Future<Map<String, dynamic>> getWarehouseTransactions(int id, {int limit = 50}) async =>
+      _get('/warehouses/$id/transactions?limit=$limit');
 
   static Future<Map<String, dynamic>> addTransaction(Map<String, dynamic> data) async =>
       _post('/warehouse/transaction', data);
@@ -105,6 +145,9 @@ class FactoryHubApi {
 
   static Future<Map<String, dynamic>> updatePlanStatus(int id, String status) async =>
       _put('/plans/$id', {'status': status});
+
+  static Future<Map<String, dynamic>> updatePlan(int id, Map<String, dynamic> data) async =>
+      _put('/plans/$id', data);
 
   // ─── Ta'minotchi buyurtmalari ──────────────────────────────
   static Future<Map<String, dynamic>> getSupplierOrders({String? status}) async =>
@@ -161,6 +204,85 @@ class FactoryHubApi {
         'warehouse_ids': warehouseIds,
       });
 
+  // ─── Product ↔ Warehouse (Many-to-Many) ────────────────
+  static Future<Map<String, dynamic>> getProductWarehouses({int? warehouseId}) async =>
+      _get('/product-warehouses${warehouseId != null ? '?warehouse_id=$warehouseId' : ''}');
+
+  static Future<Map<String, dynamic>> assignProductWarehouses(Map<String, dynamic> data) async =>
+      _post('/product-warehouses', data);
+
+  static Future<Map<String, dynamic>> removeProductWarehouses(Map<String, dynamic> data) async =>
+      _delete('/product-warehouses', body: data);
+
+  // ─── Inter-Warehouse Transfers ─────────────────────────
+  static Future<Map<String, dynamic>> getTransfers() async => _get('/transfers');
+
+  static Future<Map<String, dynamic>> getTransferDetail(int id) async => _get('/transfers/$id');
+
+  static Future<Map<String, dynamic>> createTransfer(Map<String, dynamic> data) async =>
+      _post('/transfers', data);
+
+  // ─── Warehouse Report ──────────────────────────────────
+  static Future<Map<String, dynamic>> getWarehouseReport({
+    required int warehouseId,
+    String? from,
+    String? to,
+  }) async {
+    var url = '/reports/warehouse?warehouse_id=$warehouseId';
+    if (from != null) url += '&from=$from';
+    if (to != null) url += '&to=$to';
+    return _get(url);
+  }
+
+  // ─── Unified Items Catalog ────────────────────────────
+  static Future<Map<String, dynamic>> getItems() async => _get('/items');
+
+  static Future<Map<String, dynamic>> createItem(Map<String, dynamic> data) async =>
+      _post('/items', data);
+
+  // ─── BOM (Retsept) ──────────────────────────────────
+  static Future<Map<String, dynamic>> getBoms() async => _get('/boms');
+
+  static Future<Map<String, dynamic>> getBomDetail(int id) async => _get('/boms/$id');
+
+  static Future<Map<String, dynamic>> createBom(Map<String, dynamic> data) async =>
+      _post('/boms', data);
+
+  static Future<Map<String, dynamic>> updateBom(int id, Map<String, dynamic> data) async =>
+      _put('/boms/$id', data);
+
+  // ─── Multi-Stage Production (BOM-based) ─────────────
+  static Future<Map<String, dynamic>> startBomProduction(Map<String, dynamic> data) async =>
+      _post('/production/bom/start', data);
+
+  // ─── Write-Off (Yo'qotish) ──────────────────────────
+  static Future<Map<String, dynamic>> writeOff(Map<String, dynamic> data) async =>
+      _post('/stock/write-off', data);
+
+  // ─── Hisobot (Excel) ─────────────────────────────────────
+  static Future<String?> downloadTransactionReport({
+    required String from,
+    required String to,
+    String type = 'all',
+    int? warehouseId,
+  }) async {
+    try {
+      var url = '$baseUrl$basePath/reports/transactions?from=$from&to=$to&type=$type';
+      if (warehouseId != null) url += '&warehouse_id=$warehouseId';
+      final response = await http
+          .get(Uri.parse(url), headers: _headers())
+          .timeout(const Duration(seconds: 60));
+      if (response.statusCode != 200) return null;
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/hisobot_${from}_${to}.xlsx');
+      await file.writeAsBytes(response.bodyBytes);
+      return file.path;
+    } catch (e) {
+      if (kDebugMode) print('Excel download xato: $e');
+      return null;
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════
   // PRIVATE HTTP METHODS
   // ═══════════════════════════════════════════════════════════
@@ -183,6 +305,16 @@ class FactoryHubApi {
           : {'error': 'Server xatosi: ${response.statusCode}'};
     }
     try {
+      final trimmed = response.body.trim();
+      if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+        if (response.statusCode == 404) {
+          return {'error': 'Endpoint topilmadi (404). Backend yangilanishi kerak bo\'lishi mumkin.'};
+        }
+        if (response.statusCode >= 500) {
+          return {'error': 'Server vaqtincha ishlamayapti (${response.statusCode}). 30 soniyadan keyin qayta urinib ko\'ring.'};
+        }
+        return {'error': 'Server noto\'g\'ri javob qaytardi (${response.statusCode})'};
+      }
       final data = jsonDecode(response.body);
       if (data is Map<String, dynamic>) {
         if (response.statusCode == 401) {
@@ -196,7 +328,10 @@ class FactoryHubApi {
       }
       return {'success': true, 'data': data};
     } catch (_) {
-      return {'error': "Javob o'qishda xatolik"};
+      if (response.statusCode >= 500) {
+        return {'error': 'Server xatosi (${response.statusCode}). Keyinroq qayta urinib ko\'ring.'};
+      }
+      return {'error': "Javobni o'qishda xatolik (${response.statusCode})"};
     }
   }
 
@@ -256,10 +391,17 @@ class FactoryHubApi {
     }
   }
 
-  static Future<Map<String, dynamic>> _delete(String path) async {
+  static Future<Map<String, dynamic>> _delete(
+    String path, {
+    Map<String, dynamic>? body,
+  }) async {
     try {
       final r = await http
-          .delete(Uri.parse('$baseUrl$basePath$path'), headers: _headers())
+          .delete(
+            Uri.parse('$baseUrl$basePath$path'),
+            headers: _headers(),
+            body: body != null ? jsonEncode(body) : null,
+          )
           .timeout(timeout);
       return _parseResponse(r);
     } catch (e) {

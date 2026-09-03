@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../models/user.dart';
 import '../services/api_service.dart';
+import '../theme/colors.dart';
 
 class SupplierOrdersScreen extends StatefulWidget {
   const SupplierOrdersScreen({super.key});
@@ -62,11 +63,11 @@ class _SupplierOrdersScreenState extends State<SupplierOrdersScreen> {
 
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
-                    color: isLate ? Colors.red.shade50 : null,
+                    color: isLate ? AppColors.statusCritical.withValues(alpha: 0.08) : null,
                     child: ListTile(
                       leading: Icon(
                         Icons.local_shipping,
-                        color: isLate ? Colors.red : const Color(0xFF1565C0),
+                        color: isLate ? AppColors.statusCritical : AppColors.primary,
                       ),
                       title: Text(o['materialName'] ?? '?'),
                       subtitle: Column(
@@ -85,7 +86,7 @@ class _SupplierOrdersScreenState extends State<SupplierOrdersScreen> {
                           Chip(
                             label: Text(_statusLabel(o['status']),
                                 style: const TextStyle(fontSize: 10)),
-                            backgroundColor: isLate ? Colors.red.shade200 : Colors.blue.shade50,
+                            backgroundColor: isLate ? AppColors.statusCritical.withValues(alpha: 0.3) : AppColors.primaryBg,
                           ),
                           if (FactoryHubApi.role.canControlWarehouses && o['status'] != 'received')
                             PopupMenuButton<String>(

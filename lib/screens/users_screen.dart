@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/user.dart';
 import '../services/api_service.dart';
+import '../theme/colors.dart';
 
 class UsersScreen extends StatefulWidget {
   const UsersScreen({super.key});
@@ -70,6 +71,9 @@ class _UsersScreenState extends State<UsersScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text((u['role'] as String?)?.label ?? '-'),
+                          if ((u['department'] as String?)?.isNotEmpty == true)
+                            Text('Bo\'lim: ${u['department']}',
+                                style: const TextStyle(fontSize: 11)),
                           if (warehouses.isNotEmpty)
                             Text('Omborlar: $warehouses',
                                 style: const TextStyle(fontSize: 11), maxLines: 2),
@@ -196,7 +200,21 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   String _role = AppRoles.warehouseKeeper;
+  String _department = '';
   String? _error;
+
+  static const List<String> _departments = [
+    '',
+    'Ishlab chiqarish',
+    'Sotuv',
+    'Xom ashyo',
+    'Ombor',
+    'Ta\'minot',
+    'Boshqaruv',
+    'Buxgalteriya',
+    'Dillerlar',
+    'IT',
+  ];
 
   @override
   void dispose() {
@@ -219,6 +237,7 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
       'email': _email.text.trim(),
       'password': _password.text,
       'role': _role,
+      'department': _department,
     });
     if (!mounted) return;
     if (result['error'] != null) {
@@ -231,7 +250,7 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
       if (!mounted) return;
       Navigator.pop(context, false);
       await Navigator.push<bool>(
-        this.context,
+        context,
         MaterialPageRoute(
           builder: (_) => _AssignSheet(
             userId: int.parse(newUser['id'].toString()),
@@ -240,7 +259,7 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
         ),
       );
       if (!mounted) return;
-      Navigator.pop(this.context, true);
+      Navigator.pop(context, true);
     } else {
       Navigator.pop(context, true);
     }
@@ -303,9 +322,21 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _department.isEmpty ? null : _department,
+              items: _departments.where((d) => d.isNotEmpty).map((d) {
+                return DropdownMenuItem(value: d, child: Text(d));
+              }).toList(),
+              onChanged: (v) => setState(() => _department = v ?? ''),
+              decoration: InputDecoration(
+                labelText: 'Bo\'lim (ixtiyoriy)',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
             if (_error != null) ...[
               const SizedBox(height: 8),
-              Text(_error!, style: TextStyle(color: Colors.red.shade700)),
+              Text(_error!, style: TextStyle(color: AppColors.statusCritical)),
             ],
             const SizedBox(height: 16),
             ElevatedButton(onPressed: _submit, child: const Text("Qo'shish")),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../responsive/app_breakpoints.dart';
 import '../services/api_service.dart';
+import '../theme/colors.dart';
 
 class AlertsScreen extends StatefulWidget {
   const AlertsScreen({super.key});
@@ -39,54 +41,128 @@ class _AlertsScreenState extends State<AlertsScreen> {
     final lowStock = _data!['lowStock'] as List<dynamic>? ?? [];
     final lateOrders = _data!['lateSupplierOrders'] as List<dynamic>? ?? [];
     final overduePlans = _data!['overduePlans'] as List<dynamic>? ?? [];
+    final isDesktop = AppBreakpoints.isDesktop(context);
+
+    if (lowStock.isEmpty && lateOrders.isEmpty && overduePlans.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.check_circle_outline, size: 64, color: AppColors.statusOk),
+            SizedBox(height: 12),
+            Text('Hamma narsa tartibda', style: TextStyle(color: AppColors.textSecondary, fontSize: 16)),
+          ],
+        ),
+      );
+    }
 
     return RefreshIndicator(
       onRefresh: _load,
-      child: ListView(
-        padding: const EdgeInsets.all(12),
+      child: isDesktop
+          ? _buildDesktopLayout(lowStock, lateOrders, overduePlans)
+          : _buildMobileLayout(lowStock, lateOrders, overduePlans),
+    );
+  }
+
+  Widget _buildMobileLayout(List<dynamic> lowStock, List<dynamic> lateOrders, List<dynamic> overduePlans) {
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        if (lowStock.isNotEmpty) ...[
+          _sectionTitle('Kam qoldiq (${lowStock.length})', AppColors.statusWarning),
+          ...lowStock.map((a) => Card(
+                color: AppColors.statusWarning.withValues(alpha: 0.08),
+                margin: const EdgeInsets.only(bottom: 6),
+                child: ListTile(
+                  leading: const Icon(Icons.inventory, color: AppColors.statusWarning),
+                  title: Text(a['name'] ?? ''),
+                  trailing: Text('${a['balance']} < ${a['minQty']}',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              )),
+        ],
+        if (lateOrders.isNotEmpty) ...[
+          _sectionTitle("Kechikkan buyurtmalar (${lateOrders.length})", AppColors.statusCritical),
+          ...lateOrders.map((a) => Card(
+                color: AppColors.statusCritical.withValues(alpha: 0.08),
+                margin: const EdgeInsets.only(bottom: 6),
+                child: ListTile(
+                  leading: const Icon(Icons.local_shipping, color: AppColors.statusCritical),
+                  title: Text('${a['materialName'] ?? ''} — ${a['supplierName'] ?? ''}'),
+                  subtitle: Text('Kutilgan sana: ${a['expectedAt']?.toString().substring(0, 10)}'),
+                  trailing: Text('+${a['daysLate']} kun',
+                      style: const TextStyle(color: AppColors.statusCritical, fontWeight: FontWeight.bold)),
+                ),
+              )),
+        ],
+        if (overduePlans.isNotEmpty) ...[
+          _sectionTitle('Muddati o\'tgan rejalar (${overduePlans.length})', AppColors.statusWarning),
+          ...overduePlans.map((a) => Card(
+                color: AppColors.statusWarning.withValues(alpha: 0.08),
+                margin: const EdgeInsets.only(bottom: 6),
+                child: ListTile(
+                  leading: const Icon(Icons.assignment_late, color: AppColors.statusWarning),
+                  title: Text(a['title'] ?? ''),
+                  trailing: Text('Qoldi: ${a['remaining']}',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              )),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildDesktopLayout(List<dynamic> lowStock, List<dynamic> lateOrders, List<dynamic> overduePlans) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (lowStock.isEmpty && lateOrders.isEmpty && overduePlans.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(40),
-              child: Center(child: Text('Hamma narsa tartibda')),
+          if (lowStock.isNotEmpty)
+            Expanded(
+              child: _AlertSection(
+                title: 'Kam qoldiq (${lowStock.length})',
+                color: AppColors.statusWarning,
+                icon: Icons.inventory,
+                items: lowStock,
+                itemBuilder: (a) => ListTile(
+                  title: Text(a['name'] ?? ''),
+                  trailing: Text('${a['balance']} < ${a['minQty']}',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
             ),
-          if (lowStock.isNotEmpty) ...[
-            _sectionTitle('Kam qoldiq (${lowStock.length})', Colors.orange),
-            ...lowStock.map((a) => Card(
-                  color: Colors.orange.shade50,
-                  margin: const EdgeInsets.only(bottom: 6),
-                  child: ListTile(
-                    leading: const Icon(Icons.inventory, color: Colors.orange),
-                    title: Text(a['name'] ?? ''),
-                    trailing: Text('${a['balance']} < ${a['minQty']}'),
-                  ),
-                )),
-          ],
-          if (lateOrders.isNotEmpty) ...[
-            _sectionTitle("Kechikkan buyurtmalar (${lateOrders.length})", Colors.red),
-            ...lateOrders.map((a) => Card(
-                  color: Colors.red.shade50,
-                  margin: const EdgeInsets.only(bottom: 6),
-                  child: ListTile(
-                    leading: const Icon(Icons.local_shipping, color: Colors.red),
-                    title: Text('${a['materialName'] ?? ''} — ${a['supplierName'] ?? ''}'),
-                    subtitle: Text('Kutilgan sana: ${a['expectedAt']?.toString().substring(0, 10)}'),
-                    trailing: Text('+${a['daysLate']} kun', style: TextStyle(color: Colors.red.shade700)),
-                  ),
-                )),
-          ],
-          if (overduePlans.isNotEmpty) ...[
-            _sectionTitle('Muddati o`tgan rejalar (${overduePlans.length})', Colors.deepPurple),
-            ...overduePlans.map((a) => Card(
-                  color: Colors.deepPurple.shade50,
-                  margin: const EdgeInsets.only(bottom: 6),
-                  child: ListTile(
-                    leading: Icon(Icons.assignment_late, color: Colors.deepPurple.shade400),
-                    title: Text(a['title'] ?? ''),
-                    trailing: Text('Qoldi: ${a['remaining']}'),
-                  ),
-                )),
-          ],
+          if (lowStock.isNotEmpty && lateOrders.isNotEmpty) const SizedBox(width: 16),
+          if (lateOrders.isNotEmpty)
+            Expanded(
+              child: _AlertSection(
+                title: "Kechikkan buyurtmalar (${lateOrders.length})",
+                color: AppColors.statusCritical,
+                icon: Icons.local_shipping,
+                items: lateOrders,
+                itemBuilder: (a) => ListTile(
+                  title: Text('${a['materialName'] ?? ''} — ${a['supplierName'] ?? ''}'),
+                  subtitle: Text('Kutilgan: ${a['expectedAt']?.toString().substring(0, 10)}'),
+                  trailing: Text('+${a['daysLate']} kun',
+                      style: const TextStyle(color: AppColors.statusCritical, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ),
+          if (lateOrders.isNotEmpty && overduePlans.isNotEmpty) const SizedBox(width: 16),
+          if (overduePlans.isNotEmpty)
+            Expanded(
+              child: _AlertSection(
+                title: 'Muddati o\'tgan rejalar (${overduePlans.length})',
+                color: AppColors.statusWarning,
+                icon: Icons.assignment_late,
+                items: overduePlans,
+                itemBuilder: (a) => ListTile(
+                  title: Text(a['title'] ?? ''),
+                  trailing: Text('Qoldi: ${a['remaining']}',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -94,7 +170,47 @@ class _AlertsScreenState extends State<AlertsScreen> {
 
   Widget _sectionTitle(String text, Color color) => Padding(
         padding: const EdgeInsets.only(top: 8, bottom: 8, left: 4),
-        child: Text(text,
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: color)),
+        child: Text(text, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: color)),
       );
+}
+
+class _AlertSection extends StatelessWidget {
+  final String title;
+  final Color color;
+  final IconData icon;
+  final List<dynamic> items;
+  final Widget Function(Map<String, dynamic>) itemBuilder;
+
+  const _AlertSection({
+    required this.title,
+    required this.color,
+    required this.icon,
+    required this.items,
+    required this.itemBuilder,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: color, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: color)),
+                ),
+              ],
+            ),
+            const Divider(),
+            ...items.map((a) => itemBuilder(a as Map<String, dynamic>)),
+          ],
+        ),
+      ),
+    );
+  }
 }
