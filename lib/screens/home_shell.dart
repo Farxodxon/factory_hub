@@ -8,12 +8,16 @@ import 'alerts_screen.dart';
 import 'catalog_screen.dart';
 import 'dashboard_home.dart';
 import 'hr_screen.dart';
+import 'inspection_screen.dart';
 import 'login_screen.dart';
+import 'mixing_screen.dart';
+import 'packaging_screen.dart';
 import 'plans_screen.dart';
 import 'production_screen.dart';
 import 'reports_screen.dart';
 import 'supplier_orders_screen.dart';
 import 'thresholds_screen.dart';
+import 'transfer_confirmations_screen.dart';
 import 'users_screen.dart';
 import 'warehouses_screen.dart';
 
@@ -21,6 +25,16 @@ Widget? moduleScreenFor(String key) {
   switch (key) {
     case 'hr':
       return const HrScreen();
+    case 'production':
+      return const MixingScreen();
+    case 'packaging':
+      return const PackagingScreen();
+    case 'planning':
+      return const PlansScreen();
+    case 'inspection':
+      return const InspectionScreen();
+    case 'transfer_confirmations':
+      return const TransferConfirmationsScreen();
     case 'production_planning':
       return const ProductionScreen();
     case 'supplier_orders':
@@ -40,6 +54,16 @@ IconData moduleIconFor(String key) {
   switch (key) {
     case 'hr':
       return Icons.badge;
+    case 'production':
+      return Icons.deck;
+    case 'packaging':
+      return Icons.inventory_2;
+    case 'planning':
+      return Icons.assignment;
+    case 'inspection':
+      return Icons.fact_check;
+    case 'transfer_confirmations':
+      return Icons.published_with_changes;
     case 'production_planning':
       return Icons.assignment;
     case 'supplier_orders':
@@ -139,20 +163,23 @@ class _HomeShellState extends State<HomeShell> {
 
     if (!role.isDirector) {
       entries.add(_NavEntry(const NavItem(index: 3, icon: Icons.assignment, label: 'Rejalar'), const PlansScreen()));
-      entries.add(_NavEntry(const NavItem(index: 4, icon: Icons.factory, label: 'Ishlab chiqarish'), const ProductionScreen()));
+      entries.add(_NavEntry(const NavItem(index: 4, icon: Icons.deck, label: 'Aralashtirish'), const MixingScreen()));
+      entries.add(_NavEntry(const NavItem(index: 5, icon: Icons.inventory_2, label: 'Qadoqlash'), const PackagingScreen()));
+      entries.add(_NavEntry(const NavItem(index: 6, icon: Icons.published_with_changes, label: 'Qabul tasdiqlash'), const TransferConfirmationsScreen()));
+      entries.add(_NavEntry(const NavItem(index: 7, icon: Icons.fact_check, label: 'Tekshiruv'), const InspectionScreen()));
     }
     if (role.canControlWarehouses) {
-      entries.add(_NavEntry(const NavItem(index: 5, icon: Icons.local_shipping, label: "Ta'minotchi buyurtmalari"), const SupplierOrdersScreen()));
+      entries.add(_NavEntry(const NavItem(index: 8, icon: Icons.local_shipping, label: "Ta'minotchi buyurtmalari"), const SupplierOrdersScreen()));
     }
 
-    entries.add(_NavEntry(const NavItem(index: 6, icon: Icons.bar_chart, label: 'Hisobotlar'), const ReportsScreen()));
-    entries.add(_NavEntry(const NavItem(index: 7, icon: Icons.notifications_active, label: 'Ogohlantirishlar'), const AlertsScreen()));
+    entries.add(_NavEntry(const NavItem(index: 9, icon: Icons.bar_chart, label: 'Hisobotlar'), const ReportsScreen()));
+    entries.add(_NavEntry(const NavItem(index: 10, icon: Icons.notifications_active, label: 'Ogohlantirishlar'), const AlertsScreen()));
 
     if (role.canManageThresholds) {
-      entries.add(_NavEntry(const NavItem(index: 8, icon: Icons.tune, label: 'Kritik darajalar'), const ThresholdsScreen()));
+      entries.add(_NavEntry(const NavItem(index: 11, icon: Icons.tune, label: 'Kritik darajalar'), const ThresholdsScreen()));
     }
     if (role.canManageUsers) {
-      entries.add(_NavEntry(const NavItem(index: 9, icon: Icons.people, label: 'Foydalanuvchilar'), const UsersScreen()));
+      entries.add(_NavEntry(const NavItem(index: 12, icon: Icons.people, label: 'Foydalanuvchilar'), const UsersScreen()));
     }
     if (role.canViewHr) {
       entries.add(_NavEntry(NavItem(index: entries.length, icon: Icons.badge, label: 'Xodimlar'), const HrScreen()));

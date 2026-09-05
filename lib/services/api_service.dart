@@ -379,6 +379,72 @@ class FactoryHubApi {
   static Future<Map<String, dynamic>> startBomProduction(Map<String, dynamic> data) async =>
       _post('/production/bom/start', data);
 
+  // ─── Soddalashtirilgan ishlab chiqarish (Mixing) ─────
+  static Future<Map<String, dynamic>> mixingPreview({
+    required int bomId,
+    required double outputQuantity,
+  }) async =>
+      _get('/production/mixing/preview?bom_id=$bomId&output_quantity=$outputQuantity');
+
+  static Future<Map<String, dynamic>> startMixing({
+    required int bomId,
+    required double outputQuantity,
+  }) async =>
+      _post('/production/mixing/start', {'bom_id': bomId, 'output_quantity': outputQuantity});
+
+  // ─── Qadoqlash (Packaging) ─────────────────────────
+  static Future<Map<String, dynamic>> packagingPreview({
+    required int bomId,
+    required double outputQuantity,
+  }) async =>
+      _get('/production/packaging/preview?bom_id=$bomId&output_quantity=$outputQuantity');
+
+  static Future<Map<String, dynamic>> startPackaging({
+    required int bomId,
+    required double outputQuantity,
+    required int destWarehouseId,
+  }) async =>
+      _post('/production/packaging/start', {
+        'bom_id': bomId,
+        'output_quantity': outputQuantity,
+        'dest_warehouse_id': destWarehouseId,
+      });
+
+  // ─── Tasdiqlash zanjiri (pending transfers) ────────
+  static Future<Map<String, dynamic>> getPendingTransfers({required int warehouseId}) async =>
+      _get('/transfers/pending?warehouse_id=$warehouseId');
+
+  static Future<Map<String, dynamic>> confirmTransfer(int transferId) async =>
+      _post('/transfers/$transferId/confirm', {});
+
+  static Future<Map<String, dynamic>> rejectTransfer(int transferId, String reason) async =>
+      _post('/transfers/$transferId/reject', {'reason': reason});
+
+  // ─── Karantin tekshiruvi (inspections) ─────────────
+  static Future<Map<String, dynamic>> receiveToQuarantine({
+    required int itemId,
+    required double quantity,
+    String? unit,
+    required int quarantineWarehouseId,
+    String? note,
+  }) async =>
+      _post('/inspections/receive', {
+        'item_id': itemId,
+        'quantity': quantity,
+        if (unit != null && unit.isNotEmpty) 'unit': unit,
+        'quarantine_warehouse_id': quarantineWarehouseId,
+        if (note != null && note.isNotEmpty) 'note': note,
+      });
+
+  static Future<Map<String, dynamic>> getPendingInspections({required int warehouseId}) async =>
+      _get('/inspections/pending?warehouse_id=$warehouseId');
+
+  static Future<Map<String, dynamic>> decideInspection(int inspectionId, String result, {String? note}) async =>
+      _post('/inspections/$inspectionId/decide', {
+        'result': result,
+        if (note != null && note.isNotEmpty) 'note': note,
+      });
+
   // ─── Write-Off (Yo'qotish) ──────────────────────────
   static Future<Map<String, dynamic>> writeOff(Map<String, dynamic> data) async =>
       _post('/stock/write-off', data);
