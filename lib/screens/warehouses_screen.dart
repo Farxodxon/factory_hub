@@ -336,6 +336,8 @@ class WarehouseDetailScreenState extends State<WarehouseDetailScreen> {
   bool _loadingTransactions = false;
   List<dynamic> _transfers = [];
   bool _loadingTransfers = false;
+  List<dynamic> _pendingTransfers = [];
+  final Set<int> _pendingBusy = {};
 
   @override
   void initState() {
@@ -375,6 +377,7 @@ class WarehouseDetailScreenState extends State<WarehouseDetailScreen> {
   Future<void> _loadTransfers() async {
     setState(() => _loadingTransfers = true);
     final result = await FactoryHubApi.getTransfers();
+    final pendingResult = await FactoryHubApi.getPendingTransfers(warehouseId: widget.id);
     if (!mounted) return;
     final all = result['transfers'] ?? [];
     setState(() {
@@ -382,7 +385,66 @@ class WarehouseDetailScreenState extends State<WarehouseDetailScreen> {
       _transfers = all.where((t) =>
         t['fromWarehouse'] != null || t['toWarehouse'] != null
       ).toList();
+      _pendingTransfers = pendingResult['transfers'] ?? [];
     });
+  }
+
+  Future<void> _confirmPending(Map<String, dynamic> t) async {
+    final id = t['id'] as int;
+    setState(() => _pendingBusy.add(id));
+    final result = await FactoryHubApi.confirmTransfer(id);
+    if (!mounted) return;
+    setState(() => _pendingBusy.remove(id));
+    if (result['error'] != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result['error']), backgroundColor: AppColors.statusCritical),
+      );
+      return;
+    }
+    _load();
+  }
+
+  Future<void> _rejectPendingPrompt(Map<String, dynamic> t) async {
+    final controller = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Rad etish sababi'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 2,
+          decoration: const InputDecoration(
+            labelText: 'Sabab',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Bekor qilish')),
+          ElevatedButton(
+            onPressed: () {
+              final text = controller.text.trim();
+              if (text.isEmpty) return;
+              Navigator.pop(ctx, text);
+            },
+            child: const Text('Rad etish'),
+          ),
+        ],
+      ),
+    );
+    if (reason == null) return;
+    final id = t['id'] as int;
+    setState(() => _pendingBusy.add(id));
+    final result = await FactoryHubApi.rejectTransfer(id, reason);
+    if (!mounted) return;
+    setState(() => _pendingBusy.remove(id));
+    if (result['error'] != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result['error']), backgroundColor: AppColors.statusCritical),
+      );
+      return;
+    }
+    _load();
   }
 
   Future<void> _createTransfer() async {
@@ -877,58 +939,136 @@ class WarehouseDetailScreenState extends State<WarehouseDetailScreen> {
 
   Widget _buildTransferList() {
     if (_loadingTransfers) return const Center(child: CircularProgressIndicator());
-    if (_transfers.isEmpty) {
-      return const Center(child: Text('Hali transfer yo\'q'));
-    }
+    final canAct = FactoryHubApi.role.canTransactStock;
     return RefreshIndicator(
       onRefresh: _loadTransfers,
-      child: ListView.builder(
+      child: ListView(
         padding: const EdgeInsets.all(12),
-        itemCount: _transfers.length,
-        itemBuilder: (_, i) {
-          final t = _transfers[i];
-          final status = t['status'] ?? '';
-          final isCompleted = status == 'completed';
-          final isCancelled = status == 'cancelled';
-          final isSale = t['isSale'] == true;
-          final color = isCompleted
-              ? AppColors.statusOk
-              : isCancelled
-                  ? AppColors.statusCritical
-                  : AppColors.statusWarning;
-          return Card(
-            margin: const EdgeInsets.only(bottom: 6),
-            child: ListTile(
-              leading: CircleAvatar(
-                backgroundColor: color.withValues(alpha: 0.15),
-                child: Icon(
-                  isCompleted ? (isSale ? Icons.payments : Icons.check) : isCancelled ? Icons.close : Icons.hourglass_empty,
-                  color: color,
-                  size: 20,
-                ),
-              ),
-              title: Text(
-                '${t['fromWarehouse'] ?? ''} → ${t['toWarehouse'] ?? ''}${isSale ? "  (SOTUV)" : ""}',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-              ),
-              subtitle: Text(
-                '${t['itemCount'] ?? 0} ta mahsulot • ${t['createdBy'] ?? ''}',
-                style: const TextStyle(fontSize: 12),
-              ),
-              trailing: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  isCompleted ? 'Bajarildi' : isCancelled ? 'Bekor qilindi' : 'Kutilmoqda',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color),
-                ),
-              ),
+        children: [
+          if (_pendingTransfers.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text('Qabul qilish kutilmoqda (${_pendingTransfers.length})',
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
             ),
-          );
-        },
+            ..._pendingTransfers.map((t) => _buildPendingCard(t, canAct)),
+            const Divider(height: 24),
+          ],
+          Text('Tarix',
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+          const SizedBox(height: 6),
+          if (_transfers.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: Text('Hali transfer yo\'q')),
+            )
+          else
+            ..._transfers.map((t) => _buildHistoryCard(t)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPendingCard(Map<String, dynamic> t, bool canAct) {
+    final id = t['id'] as int;
+    final busy = _pendingBusy.contains(id);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(t['itemName'] ?? '',
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                      maxLines: 2, overflow: TextOverflow.ellipsis),
+                ),
+                Text('${t['quantity']} ${t['unit'] ?? ''}',
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text('Manba: ${t['sourceName'] ?? ''}',
+                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            if (t['createdByName'] != null && '${t['createdByName']}'.isNotEmpty)
+              Text('Yaratdi: ${t['createdByName']}',
+                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                if (canAct) ...[
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: busy ? null : () => _confirmPending(t),
+                      icon: const Icon(Icons.check, size: 18),
+                      label: const Text('Qabul qilish'),
+                      style: FilledButton.styleFrom(backgroundColor: AppColors.statusOk),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: busy ? null : () => _rejectPendingPrompt(t),
+                      icon: const Icon(Icons.close, size: 18),
+                      label: const Text('Rad etish'),
+                      style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.statusCritical),
+                    ),
+                  ),
+                ] else
+                  const Text('Sizga tasdiqlash huquqi berilmagan',
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHistoryCard(Map<String, dynamic> t) {
+    final status = t['status'] ?? '';
+    final isCompleted = status == 'completed';
+    final isCancelled = status == 'cancelled';
+    final isSale = t['isSale'] == true;
+    final color = isCompleted
+        ? AppColors.statusOk
+        : isCancelled
+            ? AppColors.statusCritical
+            : AppColors.statusWarning;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 6),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: color.withValues(alpha: 0.15),
+          child: Icon(
+            isCompleted ? (isSale ? Icons.payments : Icons.check) : isCancelled ? Icons.close : Icons.hourglass_empty,
+            color: color,
+            size: 20,
+          ),
+        ),
+        title: Text(
+          '${t['fromWarehouse'] ?? ''} → ${t['toWarehouse'] ?? ''}${isSale ? "  (SOTUV)" : ""}',
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+        ),
+        subtitle: Text(
+          '${t['itemCount'] ?? 0} ta mahsulot • ${t['createdBy'] ?? ''}',
+          style: const TextStyle(fontSize: 12),
+        ),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            isCompleted ? 'Bajarildi' : isCancelled ? 'Bekor qilindi' : 'Kutilmoqda',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color),
+          ),
+        ),
       ),
     );
   }

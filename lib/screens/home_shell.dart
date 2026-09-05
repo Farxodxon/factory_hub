@@ -14,10 +14,10 @@ import 'mixing_screen.dart';
 import 'packaging_screen.dart';
 import 'plans_screen.dart';
 import 'production_screen.dart';
+import 'recipes_screen.dart';
 import 'reports_screen.dart';
 import 'supplier_orders_screen.dart';
 import 'thresholds_screen.dart';
-import 'transfer_confirmations_screen.dart';
 import 'users_screen.dart';
 import 'warehouses_screen.dart';
 
@@ -29,12 +29,12 @@ Widget? moduleScreenFor(String key) {
       return const MixingScreen();
     case 'packaging':
       return const PackagingScreen();
+    case 'recipes':
+      return const RecipesScreen();
     case 'planning':
       return const PlansScreen();
     case 'inspection':
       return const InspectionScreen();
-    case 'transfer_confirmations':
-      return const TransferConfirmationsScreen();
     case 'production_planning':
       return const ProductionScreen();
     case 'supplier_orders':
@@ -58,12 +58,12 @@ IconData moduleIconFor(String key) {
       return Icons.deck;
     case 'packaging':
       return Icons.inventory_2;
+    case 'recipes':
+      return Icons.menu_book;
     case 'planning':
       return Icons.assignment;
     case 'inspection':
       return Icons.fact_check;
-    case 'transfer_confirmations':
-      return Icons.published_with_changes;
     case 'production_planning':
       return Icons.assignment;
     case 'supplier_orders':
@@ -165,7 +165,7 @@ class _HomeShellState extends State<HomeShell> {
       entries.add(_NavEntry(const NavItem(index: 3, icon: Icons.assignment, label: 'Rejalar'), const PlansScreen()));
       entries.add(_NavEntry(const NavItem(index: 4, icon: Icons.deck, label: 'Aralashtirish'), const MixingScreen()));
       entries.add(_NavEntry(const NavItem(index: 5, icon: Icons.inventory_2, label: 'Qadoqlash'), const PackagingScreen()));
-      entries.add(_NavEntry(const NavItem(index: 6, icon: Icons.published_with_changes, label: 'Qabul tasdiqlash'), const TransferConfirmationsScreen()));
+      entries.add(_NavEntry(const NavItem(index: 6, icon: Icons.menu_book, label: 'Retseptlar'), const RecipesScreen()));
       entries.add(_NavEntry(const NavItem(index: 7, icon: Icons.fact_check, label: 'Tekshiruv'), const InspectionScreen()));
     }
     if (role.canControlWarehouses) {
