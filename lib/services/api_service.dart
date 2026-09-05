@@ -417,6 +417,9 @@ class FactoryHubApi {
   static Future<Map<String, dynamic>> getPendingTransfers({required int warehouseId}) async =>
       _get('/transfers/pending?warehouse_id=$warehouseId');
 
+  static Future<Map<String, dynamic>> getPendingCounts() async =>
+      _get('/transfers/pending/summary');
+
   static Future<Map<String, dynamic>> confirmTransfer(int transferId) async =>
       _post('/transfers/$transferId/confirm', {});
 

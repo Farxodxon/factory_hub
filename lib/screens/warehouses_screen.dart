@@ -18,6 +18,7 @@ class _WarehousesScreenState extends State<WarehousesScreen> {
   String? _error;
   bool _loading = true;
   int? _selectedId;
+  Map<int, int> _pendingCounts = {};
 
   static const Map<String, String> _typeLabels = {
     'raw': 'Xom ashyo',
@@ -66,6 +67,7 @@ class _WarehousesScreenState extends State<WarehousesScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     final result = await FactoryHubApi.getWarehouses();
+    final counts = await FactoryHubApi.getPendingCounts();
     if (!mounted) return;
     setState(() {
       _loading = false;
@@ -75,6 +77,12 @@ class _WarehousesScreenState extends State<WarehousesScreen> {
         _warehouses = result['warehouses'] ?? [];
         _error = null;
       }
+      final map = <int, int>{};
+      for (final c in (counts['counts'] as List?) ?? []) {
+        final id = c['warehouseId'];
+        if (id is int) map[id] = (c['count'] as num?)?.toInt() ?? 0;
+      }
+      _pendingCounts = map;
     });
   }
 
@@ -227,6 +235,7 @@ class _WarehousesScreenState extends State<WarehousesScreen> {
                             itemBuilder: (_, i) {
                               final w = _warehouses[i];
                               final isSelected = _selectedId == w['id'];
+                              final pending = (_pendingCounts[w['id']] ?? 0);
                               return Card(
                                 margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -240,6 +249,10 @@ class _WarehousesScreenState extends State<WarehousesScreen> {
                                   trailing: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
+                                      if (pending > 0) ...[
+                                        _pendingBadge(pending),
+                                        const SizedBox(width: 6),
+                                      ],
                                       Text(
                                         '${w['itemCount'] ?? 0}',
                                         style: const TextStyle(fontWeight: FontWeight.bold),
@@ -285,7 +298,32 @@ class _WarehousesScreenState extends State<WarehousesScreen> {
     );
   }
 
+  Widget _pendingBadge(int count) {
+    return Tooltip(
+      message: 'Qabul tasdiqlash kutilmoqda ($count)',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        decoration: BoxDecoration(
+          color: AppColors.statusWarning,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.rule, size: 13, color: Colors.white),
+            const SizedBox(width: 3),
+            Text(
+              '$count',
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildWarehouseCard(Map<String, dynamic> w) {
+    final pending = (_pendingCounts[w['id']] ?? 0);
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
@@ -295,6 +333,10 @@ class _WarehousesScreenState extends State<WarehousesScreen> {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (pending > 0) ...[
+              _pendingBadge(pending),
+              const SizedBox(width: 6),
+            ],
             Text('${w['itemCount'] ?? 0} element'),
             if (FactoryHubApi.role.canControlWarehouses) ...[
               const SizedBox(width: 4),
@@ -328,7 +370,8 @@ class WarehouseDetailScreen extends StatefulWidget {
   State<WarehouseDetailScreen> createState() => WarehouseDetailScreenState();
 }
 
-class WarehouseDetailScreenState extends State<WarehouseDetailScreen> {
+class WarehouseDetailScreenState extends State<WarehouseDetailScreen>
+    with SingleTickerProviderStateMixin {
   Map<String, dynamic>? _detail;
   bool _loading = true;
   String? _error;
@@ -338,11 +381,19 @@ class WarehouseDetailScreenState extends State<WarehouseDetailScreen> {
   bool _loadingTransfers = false;
   List<dynamic> _pendingTransfers = [];
   final Set<int> _pendingBusy = {};
+  late final TabController _tabController;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -642,39 +693,60 @@ class WarehouseDetailScreenState extends State<WarehouseDetailScreen> {
                     ],
                   ),
                 )
-              : DefaultTabController(
-                  length: 3,
-                  child: Column(
-                    children: [
-                      TabBar(
-                        labelColor: AppColors.primary,
-                        unselectedLabelColor: AppColors.textSecondary,
-                        indicatorColor: AppColors.primary,
-                        tabs: const [
-                          Tab(icon: Icon(Icons.inventory_2), text: 'Qoldiq'),
-                          Tab(icon: Icon(Icons.history), text: 'Tarix'),
-                          Tab(icon: Icon(Icons.swap_horiz), text: 'Transfer'),
-                        ],
-                      ),
-                      Expanded(
-                        child: TabBarView(
+              : Column(
+                children: [
+                  if (_pendingTransfers.isNotEmpty)
+                    InkWell(
+                      onTap: () => _tabController.animateTo(2),
+                      child: Container(
+                        width: double.infinity,
+                        color: AppColors.statusWarning.withValues(alpha: 0.15),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        child: Row(
                           children: [
-                            RefreshIndicator(
-                              onRefresh: _load,
-                              child: stock.isEmpty
-                                  ? const Center(child: Text('Bu omborda qoldiq yo\'q'))
-                                  : isDesktop
-                                      ? _buildStockTable(stock)
-                                      : _buildStockList(stock),
+                            const Icon(Icons.rule, color: AppColors.statusWarning, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Qabul tasdiqlash kutilmoqda (${_pendingTransfers.length})',
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                              ),
                             ),
-                            _buildTransactionList(),
-                            _buildTransferList(),
+                            const Icon(Icons.chevron_right, size: 18, color: AppColors.textSecondary),
                           ],
                         ),
                       ),
+                    ),
+                  TabBar(
+                    controller: _tabController,
+                    labelColor: AppColors.primary,
+                    unselectedLabelColor: AppColors.textSecondary,
+                    indicatorColor: AppColors.primary,
+                    tabs: const [
+                      Tab(icon: Icon(Icons.inventory_2), text: 'Qoldiq'),
+                      Tab(icon: Icon(Icons.history), text: 'Tarix'),
+                      Tab(icon: Icon(Icons.swap_horiz), text: 'Transfer'),
                     ],
                   ),
-                ),
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        RefreshIndicator(
+                          onRefresh: _load,
+                          child: stock.isEmpty
+                              ? const Center(child: Text('Bu omborda qoldiq yo\'q'))
+                              : isDesktop
+                                  ? _buildStockTable(stock)
+                                  : _buildStockList(stock),
+                        ),
+                        _buildTransactionList(),
+                        _buildTransferList(),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
     );
   }
 
