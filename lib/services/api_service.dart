@@ -346,6 +346,9 @@ class FactoryHubApi {
   static Future<Map<String, dynamic>> createTransfer(Map<String, dynamic> data) async =>
       _post('/transfers', data);
 
+  static Future<Map<String, dynamic>> sendTransfer(Map<String, dynamic> data) async =>
+      _post('/transfers/send', data);
+
   // ─── Warehouse Report ──────────────────────────────────
   static Future<Map<String, dynamic>> getWarehouseReport({
     required int warehouseId,

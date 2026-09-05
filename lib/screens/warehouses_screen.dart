@@ -395,7 +395,7 @@ class WarehouseDetailScreenState extends State<WarehouseDetailScreen> {
       _load();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Transfer muvaffaqiyatli bajarildi'),
+          content: Text('Transfer yuborildi. Qabul qiluvchi ombor tasdiqlashini kutmoqda'),
           backgroundColor: AppColors.statusOk,
           duration: Duration(seconds: 2),
         ),
@@ -1386,31 +1386,55 @@ class _TransferSheetState extends State<_TransferSheet> {
       setState(() => _error = 'Kamida bitta mahsulot tanlang');
       return;
     }
-    setState(() { _submitting = true; _error = null; });
-    final items = _selectedItems.map((si) {
+    final payloads = <Map<String, dynamic>>[];
+    for (final si in _selectedItems) {
       final qty = double.tryParse(si['qtyCtrl'].text.replaceAll(',', '.')) ?? 0;
-      return {
-        'item_type': si['itemType'],
-        'ref_id': si['refId'],
-        'ref_barcode': si['refBarcode'],
-        'name': si['name'],
+      if (qty <= 0) {
+        setState(() => _error = "Miqdor noto'g'ri: ${si['name']}");
+        return;
+      }
+      final itemId = _itemIdFor(si);
+      if (itemId == null) {
+        setState(() => _error = "Yuborish identifikatori aniqlanmadi: ${si['name']}");
+        return;
+      }
+      payloads.add({
+        'item_id': itemId,
+        'quantity': qty,
         'unit': si['unit'],
-        'qty': qty,
-      };
-    }).toList();
-    final result = await FactoryHubApi.createTransfer({
-      'from_warehouse_id': widget.fromWarehouseId,
-      'to_warehouse_id': _toWarehouseId,
-      'items': items,
-      'note': _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
-    });
+        'source_warehouse_id': widget.fromWarehouseId,
+        'dest_warehouse_id': _toWarehouseId,
+        'note': _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+      });
+    }
+    setState(() { _submitting = true; _error = null; });
+    String? firstError;
+    for (final payload in payloads) {
+      final result = await FactoryHubApi.sendTransfer(payload);
+      if (result['error'] != null) {
+        firstError ??= result['error'];
+        break;
+      }
+    }
     if (!mounted) return;
     setState(() => _submitting = false);
-    if (result['error'] != null) {
-      setState(() => _error = result['error']);
+    if (firstError != null) {
+      setState(() => _error = firstError);
       return;
     }
     Navigator.pop(context, true);
+  }
+
+  int? _itemIdFor(Map<String, dynamic> si) {
+    final refId = si['refId'];
+    if (refId is num) return refId.toInt();
+    if (refId != null) {
+      final v = int.tryParse(refId.toString());
+      if (v != null) return v;
+    }
+    final barcode = si['refBarcode'];
+    if (barcode != null) return int.tryParse(barcode.toString());
+    return null;
   }
 
   @override
