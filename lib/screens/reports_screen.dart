@@ -12,7 +12,7 @@ class ReportsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Column(
         children: [
           Material(
@@ -25,12 +25,18 @@ class ReportsScreen extends StatelessWidget {
                 Tab(text: 'Zaxira'),
                 Tab(text: 'Ishlab chiqarish'),
                 Tab(text: 'Kirim/Chiqim'),
+                Tab(text: '51-rejim'),
               ],
             ),
           ),
           const Expanded(
             child: TabBarView(
-              children: [_StockReport(), _ProductionReport(), _TransactionReport()],
+              children: [
+                _StockReport(),
+                _ProductionReport(),
+                _TransactionReport(),
+                _Regime51Report(),
+              ],
             ),
           ),
         ],
@@ -349,6 +355,123 @@ class _TransactionReportState extends State<_TransactionReport> {
         label: Text(_downloading ? 'Yuklanmoqda...' : 'Excel yuklab olish'),
         style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
       ),
+    );
+  }
+}
+
+// ─── 51-REJIM QOLDIQ HISOBOTI ─────────────────────────────
+// Faqat is_regime_51=true bo'lgan yozuvlarni ko'rsatadi — umumiy zaxira
+// hisobotidan butunlay alohida bo'lim.
+
+class _Regime51Report extends StatefulWidget {
+  const _Regime51Report();
+
+  @override
+  State<_Regime51Report> createState() => _Regime51ReportState();
+}
+
+class _Regime51ReportState extends State<_Regime51Report> {
+  List<dynamic> _rows = [];
+  List<dynamic> _warehouses = [];
+  int? _warehouseId;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadWarehouses();
+  }
+
+  Future<void> _loadWarehouses() async {
+    final result = await FactoryHubApi.getWarehouses();
+    if (!mounted) return;
+    final all = result['warehouses'] ?? [];
+    setState(() => _warehouses = all);
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final result = await FactoryHubApi.getRegime51Balance(warehouseId: _warehouseId);
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _rows = result['balance'] ?? [];
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: DropdownButtonFormField<int?>(
+            initialValue: _warehouseId,
+            decoration: const InputDecoration(
+              labelText: 'Ombor (ixtiyoriy)',
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+            items: [
+              const DropdownMenuItem(value: null, child: Text('Barcha omborlar')),
+              ..._warehouses.map<DropdownMenuItem<int?>>(
+                (w) => DropdownMenuItem(
+                  value: w['id'] is int ? w['id'] as int : int.tryParse('${w['id']}'),
+                  child: Text('${w['name'] ?? ''} (${w['type'] ?? ''})'),
+                ),
+              ),
+            ],
+            onChanged: (v) {
+              setState(() => _warehouseId = v);
+              _load();
+            },
+          ),
+        ),
+        Expanded(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _rows.isEmpty
+                  ? RefreshIndicator(
+                      onRefresh: _load,
+                      child: ListView(
+                        children: const [
+                          SizedBox(height: 80),
+                          Center(child: Text('51-rejim bo\'yicha yozuvlar topilmadi')),
+                        ],
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _load,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(12),
+                        itemCount: _rows.length,
+                        itemBuilder: (_, i) {
+                          final r = _rows[i];
+                          final whList = _warehouses
+                              .where((w) => (w['id'] as int?) == r['warehouseId'])
+                              .toList();
+                          final whName = whList.isEmpty ? null : whList.first['name'] as String?;
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 4),
+                            child: ListTile(
+                              dense: true,
+                              leading: const Icon(Icons.flag, color: AppColors.primary),
+                              title: Text(r['name'] ?? ''),
+                              subtitle: Text(
+                                'Kod: ${r['refKey'] ?? '-'}${whName != null ? ' | Ombor: $whName' : ''}',
+                              ),
+                              trailing: Text(
+                                '${r['balance']} ${r['unit'] ?? ''}',
+                                style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+        ),
+      ],
     );
   }
 }

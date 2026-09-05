@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
+import '../models/user_access.dart';
 import 'auth_storage.dart';
 
 class FactoryHubApi {
@@ -14,9 +15,11 @@ class FactoryHubApi {
 
   static String? _token;
   static Map<String, dynamic>? _currentUser;
+  static UserAccess? _access;
 
   static String? get token => _token;
   static Map<String, dynamic>? get currentUser => _currentUser;
+  static UserAccess? get userAccess => _access;
   static String get role => _currentUser?['role'] ?? '';
   static int? get userId => int.tryParse(_currentUser?['id']?.toString() ?? '');
   static String get username => _currentUser?['username']?.toString() ?? '';
@@ -30,6 +33,7 @@ class FactoryHubApi {
       if (token != null && user != null) {
         _token = token;
         _currentUser = user;
+        await _refreshAccess();
         return true;
       }
       return false;
@@ -49,6 +53,7 @@ class FactoryHubApi {
       _currentUser = result['user'] as Map<String, dynamic>?;
       if (_token != null && _currentUser != null) {
         await AuthStorage.saveSession(_token!, _currentUser!);
+        await _refreshAccess();
       }
     }
     return result;
@@ -57,7 +62,17 @@ class FactoryHubApi {
   static Future<void> logout() async {
     _token = null;
     _currentUser = null;
+    _access = null;
     await AuthStorage.clearSession();
+  }
+
+  static Future<void> _refreshAccess() async {
+    final result = await _get('/auth/my-access');
+    if (result['is_full_access'] is bool) {
+      _access = UserAccess.fromJson(result);
+    } else {
+      _access = null;
+    }
   }
 
   static Future<Map<String, dynamic>> setupSuperAdmin(
@@ -136,6 +151,14 @@ class FactoryHubApi {
   static Future<Map<String, dynamic>> getStock({int? warehouseId}) async =>
       _get('/stock${warehouseId == null ? '' : '?warehouse_id=$warehouseId'}');
 
+  // ─── 51-rejim qoldig'i hisoboti ────────────────────────────
+  static Future<Map<String, dynamic>> getRegime51Balance({int? warehouseId, int? itemId}) {
+    final q = <String>[];
+    if (warehouseId != null) q.add('warehouse_id=$warehouseId');
+    if (itemId != null) q.add('item_id=$itemId');
+    return _get('/reports/regime51-balance${q.isEmpty ? '' : '?${q.join('&')}'}');
+  }
+
   // ─── Rejalar ───────────────────────────────────────────────
   static Future<Map<String, dynamic>> getPlans({String? status}) async =>
       _get('/plans${status == null ? '' : '?status=$status'}');
@@ -175,6 +198,89 @@ class FactoryHubApi {
   // ─── Ogohlantirishlar ──────────────────────────────────────
   static Future<Map<String, dynamic>> getAlerts() async => _get('/alerts');
 
+  // ─── HR: Xodimlar ──────────────────────────────────────────
+  static Future<Map<String, dynamic>> getEmployees({
+    String? status,
+    String? department,
+    String? search,
+  }) {
+    final q = <String>[];
+    if (status != null && status.isNotEmpty) q.add('status=$status');
+    if (department != null && department.isNotEmpty) q.add('department=$department');
+    if (search != null && search.isNotEmpty) q.add('search=${Uri.encodeQueryComponent(search)}');
+    return _get('/hr/employees${q.isEmpty ? '' : '?${q.join('&')}'}');
+  }
+
+  static Future<Map<String, dynamic>> createEmployee(Map<String, dynamic> data) async =>
+      _post('/hr/employees', data);
+
+  static Future<Map<String, dynamic>> getEmployee(int id) async => _get('/hr/employees/$id');
+
+  static Future<Map<String, dynamic>> updateEmployee(int id, Map<String, dynamic> data) async =>
+      _put('/hr/employees/$id', data);
+
+  static Future<Map<String, dynamic>> fireEmployee(int id, {String? reason}) async =>
+      _delete('/hr/employees/$id');
+
+  // ─── HR: Davomat ───────────────────────────────────────────
+  static Future<Map<String, dynamic>> getAttendance({
+    int? employeeId,
+    String? from,
+    String? to,
+  }) {
+    final q = <String>[];
+    if (employeeId != null) q.add('employee_id=$employeeId');
+    if (from != null && from.isNotEmpty) q.add('from=$from');
+    if (to != null && to.isNotEmpty) q.add('to=$to');
+    return _get('/hr/attendance${q.isEmpty ? '' : '?${q.join('&')}'}');
+  }
+
+  static Future<Map<String, dynamic>> addAttendance(Map<String, dynamic> data) async =>
+      _post('/hr/attendance', data);
+
+  static Future<Map<String, dynamic>> addAttendanceBulk(Map<String, dynamic> data) async =>
+      _post('/hr/attendance/bulk', data);
+
+  static Future<Map<String, dynamic>> updateAttendance(int id, Map<String, dynamic> data) async =>
+      _put('/hr/attendance/$id', data);
+
+  // ─── HR: Premiya/Jarima/Avans ──────────────────────────────
+  static Future<Map<String, dynamic>> getSalaryAdjustments({
+    int? employeeId,
+    String? type,
+    String? status,
+    String? from,
+    String? to,
+  }) {
+    final q = <String>[];
+    if (employeeId != null) q.add('employee_id=$employeeId');
+    if (type != null && type.isNotEmpty) q.add('type=$type');
+    if (status != null && status.isNotEmpty) q.add('status=$status');
+    if (from != null && from.isNotEmpty) q.add('from=$from');
+    if (to != null && to.isNotEmpty) q.add('to=$to');
+    return _get('/hr/salary-adjustments${q.isEmpty ? '' : '?${q.join('&')}'}');
+  }
+
+  static Future<Map<String, dynamic>> addSalaryAdjustment(Map<String, dynamic> data) async =>
+      _post('/hr/salary-adjustments', data);
+
+  static Future<Map<String, dynamic>> approveSalaryAdjustment(int id) async =>
+      _put('/hr/salary-adjustments/$id/approve', {});
+
+  static Future<Map<String, dynamic>> rejectSalaryAdjustment(int id) async =>
+      _put('/hr/salary-adjustments/$id/reject', {});
+
+  // ─── HR: Oylik hisobot ─────────────────────────────────────
+  static Future<Map<String, dynamic>> getMonthlyReport({
+    String? month,
+    int? employeeId,
+  }) {
+    final q = <String>[];
+    if (month != null && month.isNotEmpty) q.add('month=$month');
+    if (employeeId != null) q.add('employee_id=$employeeId');
+    return _get('/hr/reports/monthly${q.isEmpty ? '' : '?${q.join('&')}'}');
+  }
+
   // ─── Kritik darajalar (thresholds, admin) ──────────────────
   static Future<Map<String, dynamic>> getThresholds({String? type}) async =>
       _get('/thresholds${type == null ? '' : '?type=$type'}');
@@ -203,6 +309,24 @@ class FactoryHubApi {
         'user_id': userId,
         'warehouse_ids': warehouseIds,
       });
+
+  // ─── Admin: foydalanuvchi kirish huquqlari ────────────────
+  static Future<Map<String, dynamic>> getAdminModules() async => _get('/admin/modules');
+
+  static Future<Map<String, dynamic>> getUserAccess(int userId) async =>
+      _get('/admin/users/$userId/access');
+
+  static Future<Map<String, dynamic>> grantWarehouse(int userId, int warehouseId) async =>
+      _post('/admin/users/$userId/warehouses', {'warehouse_id': warehouseId});
+
+  static Future<Map<String, dynamic>> revokeWarehouse(int userId, int warehouseId) async =>
+      _delete('/admin/users/$userId/warehouses/$warehouseId');
+
+  static Future<Map<String, dynamic>> grantModule(int userId, String moduleKey) async =>
+      _post('/admin/users/$userId/modules', {'module_key': moduleKey});
+
+  static Future<Map<String, dynamic>> revokeModule(int userId, String moduleKey) async =>
+      _delete('/admin/users/$userId/modules/$moduleKey');
 
   // ─── Product ↔ Warehouse (Many-to-Many) ────────────────
   static Future<Map<String, dynamic>> getProductWarehouses({int? warehouseId}) async =>

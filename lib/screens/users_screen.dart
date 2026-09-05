@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/user.dart';
 import '../services/api_service.dart';
 import '../theme/colors.dart';
+import 'user_access_screen.dart';
 
 class UsersScreen extends StatefulWidget {
   const UsersScreen({super.key});
@@ -81,13 +82,24 @@ class _UsersScreenState extends State<UsersScreen> {
                       ),
                       trailing: u['isActive'] == true
                           ? PopupMenuButton<String>(
-                              onSelected: (s) async {
+onSelected: (s) async {
                                 if (s == 'assign') {
                                   final ok = await Navigator.push<bool>(
                                     context,
                                     MaterialPageRoute(
                                       builder: (_) =>
                                           _AssignSheet(userId: u['id'], username: u['username']),
+                                    ),
+                                  );
+                                  if (ok == true) _load();
+                                } else if (s == 'access') {
+                                  final ok = await Navigator.push<bool>(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => UserAccessScreen(
+                                        userId: u['id'] as int,
+                                        username: u['username']?.toString() ?? '',
+                                      ),
                                     ),
                                   );
                                   if (ok == true) _load();
@@ -98,6 +110,7 @@ class _UsersScreenState extends State<UsersScreen> {
                               },
                               itemBuilder: (_) => const [
                                 PopupMenuItem(value: 'assign', child: Text("Ombor biriktirish")),
+                                PopupMenuItem(value: 'access', child: Text("Modul huquqlari")),
                                 PopupMenuItem(value: 'deactivate', child: Text("Deaktivatsiya")),
                               ],
                             )
@@ -314,6 +327,7 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
                 DropdownMenuItem(value: AppRoles.operationsManager, child: Text('Ish boshqaruvchi')),
                 DropdownMenuItem(value: AppRoles.warehouseKeeper, child: Text('Omborchi')),
                 DropdownMenuItem(value: AppRoles.warehouseController, child: Text("Ombor nazoratchisi")),
+                DropdownMenuItem(value: AppRoles.hrManager, child: Text('HR boshqaruvchi')),
                 DropdownMenuItem(value: AppRoles.director, child: Text('Direktor')),
               ],
               onChanged: (v) => setState(() => _role = v ?? AppRoles.warehouseKeeper),

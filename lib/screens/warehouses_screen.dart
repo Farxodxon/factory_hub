@@ -30,6 +30,12 @@ class _WarehousesScreenState extends State<WarehousesScreen> {
     'spare_parts': 'Ehtiyot qismlar',
     'sales': 'Sotuv',
     'dealer': 'Dilerlar',
+    'quarantine': 'Karantin/tekshiruv',
+    'defective': 'Brak/nikoz',
+    'returned': 'Qaytarilgan mahsulot',
+    'retain_sample': 'Namuna (retain sample)',
+    'empty_container': "Bo'shagan idish/tara",
+    'other': 'Aralash (xo\'jalik, kantstovar)',
   };
 
   static const Map<String, IconData> _typeIcons = {
@@ -43,6 +49,12 @@ class _WarehousesScreenState extends State<WarehousesScreen> {
     'spare_parts': Icons.build,
     'sales': Icons.shopping_cart,
     'dealer': Icons.store,
+    'quarantine': Icons.health_and_safety,
+    'defective': Icons.error_outline,
+    'returned': Icons.assignment_return,
+    'retain_sample': Icons.science_outlined,
+    'empty_container': Icons.delete_sweep,
+    'other': Icons.category,
   };
 
   @override
@@ -257,7 +269,7 @@ class _WarehousesScreenState extends State<WarehousesScreen> {
         const VerticalDivider(width: 1),
         Expanded(
           child: _selectedId != null
-              ? _WarehouseDetail(id: _selectedId!, key: ValueKey(_selectedId))
+              ? WarehouseDetailScreen(id: _selectedId!, key: ValueKey(_selectedId))
               : const Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -298,7 +310,7 @@ class _WarehousesScreenState extends State<WarehousesScreen> {
         onTap: () async {
           await Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => _WarehouseDetail(id: w['id'])),
+            MaterialPageRoute(builder: (_) => WarehouseDetailScreen(id: w['id'])),
           );
           _load();
         },
@@ -307,16 +319,16 @@ class _WarehousesScreenState extends State<WarehousesScreen> {
   }
 }
 
-class _WarehouseDetail extends StatefulWidget {
-  const _WarehouseDetail({required this.id, super.key});
+class WarehouseDetailScreen extends StatefulWidget {
+  const WarehouseDetailScreen({required this.id, super.key});
 
   final int id;
 
   @override
-  State<_WarehouseDetail> createState() => _WarehouseDetailState();
+  State<WarehouseDetailScreen> createState() => WarehouseDetailScreenState();
 }
 
-class _WarehouseDetailState extends State<_WarehouseDetail> {
+class WarehouseDetailScreenState extends State<WarehouseDetailScreen> {
   Map<String, dynamic>? _detail;
   bool _loading = true;
   String? _error;
@@ -949,6 +961,7 @@ class _TransactionSheetState extends State<_TransactionSheet> {
   late String _selectedType;
   String? _error;
   bool _loadingItems = true;
+  bool _regime51 = false;
 
   bool get _isRawWarehouse => widget.warehouseType == 'raw';
   bool get _isFinishedWarehouse => widget.warehouseType == 'finished';
@@ -1040,6 +1053,10 @@ class _TransactionSheetState extends State<_TransactionSheet> {
       'qty': qty,
       'note': _note.text.trim().isEmpty ? null : _note.text.trim(),
     };
+    // 51-rejim bayrog'i faqat xom-ashyo qabul (kirim) uchun yuboriladi
+    if (_selectedType == 'raw_material' && widget.direction == 'in') {
+      data['is_regime_51'] = _regime51;
+    }
     if (_selectedType == 'raw_material') {
       data['ref_id'] = _selectedRawId;
     } else {
@@ -1230,6 +1247,25 @@ class _TransactionSheetState extends State<_TransactionSheet> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
+            // 51-bojxona rejimi belgisi (faqat xom-ashyo qabulida ko'rsatiladi)
+            if (widget.direction == 'in' && _selectedType == 'raw_material') ...[
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                dense: true,
+                value: _regime51,
+                onChanged: (v) => setState(() => _regime51 = v ?? false),
+                title: const Text(
+                  'Bu partiya 51-bojxona rejimiga tegishli',
+                  style: TextStyle(fontSize: 14),
+                ),
+                subtitle: const Text(
+                  'Umumiy balansga ta\'sir qilmaydi, alohida hisobot uchun',
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             TextField(
               controller: _note,
@@ -1618,6 +1654,12 @@ class _CreateWarehouseSheetState extends State<_CreateWarehouseSheet> {
                 DropdownMenuItem(value: 'spare_parts', child: Text('Ehtiyot qismlar')),
                 DropdownMenuItem(value: 'sales', child: Text('Sotuv ombori')),
                 DropdownMenuItem(value: 'dealer', child: Text('Dilerlar')),
+                DropdownMenuItem(value: 'quarantine', child: Text('Karantin/tekshiruv')),
+                DropdownMenuItem(value: 'defective', child: Text('Brak/nikoz')),
+                DropdownMenuItem(value: 'returned', child: Text('Qaytarilgan mahsulot')),
+                DropdownMenuItem(value: 'retain_sample', child: Text('Namuna (retain sample)')),
+                DropdownMenuItem(value: 'empty_container', child: Text("Bo'shagan idish/tara")),
+                DropdownMenuItem(value: 'other', child: Text('Aralash (xo\'jalik, kantstovar)')),
               ],
               onChanged: (v) => setState(() => _type = v ?? 'raw'),
               decoration: InputDecoration(
