@@ -1540,13 +1540,17 @@ class _TransferSheetState extends State<_TransferSheet> {
     if (!mounted) return;
     final allWh = whResult['warehouses'] ?? [];
     final warehouse = detailResult['warehouse'];
-    // Ruxsat etilgan yo'nalishlar: ombor sozlamalarida belgilangan transferTo ro'yxati,
-    // hali mavjud bo'lmasa ham o'sha ombor qo'shilgandan keyin sozlamada qo'shiladi.
+    // Ruxsat etilgan yo'nalishlar: ombor sozlamalarida belgilangan transferTo
+    // ro'yxati. Manzil omboriga alohida biriktirma (grant) talab qilinmaydi —
+    // backend faqat manba granti + yo'nalish so'raydi. Shuning uchun manzil
+    // ro'yxati YO'NALISh manzillaridan, biriktirilgan omborlar bilan
+    // cheklanmasdan to'ldiriladi.
+    final routesDetail = (warehouse?['transferToWarehouses'] as List?) ?? [];
     final allowedTo = (warehouse?['transferTo'] as List?)?.cast<int>() ?? [];
     setState(() {
-      _warehouses = allWh
-          .where((w) => allowedTo.contains(w['id']))
-          .toList();
+      _warehouses = routesDetail.isNotEmpty
+          ? routesDetail.cast<Map<String, dynamic>>().toList()
+          : allWh.where((w) => allowedTo.contains(w['id'])).toList();
       _stock = detailResult['stock'] ?? [];
       _loading = false;
     });
@@ -1672,9 +1676,19 @@ class _TransferSheetState extends State<_TransferSheet> {
                 onChanged: (v) => setState(() => _toWarehouseId = v),
                 decoration: InputDecoration(
                   labelText: 'Manzil ombor',
+                  hintText: _warehouses.isEmpty ? 'Yo\'nalish sozlanmagan' : null,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
+              if (_warehouses.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text(
+                    'Bu ombordan transfer yo\'nalishlari sozlanmagan. '
+                    'Ombor sozlamalaridan transfer yo\'nalishini qo\'shing.',
+                    style: TextStyle(fontSize: 12, color: AppColors.statusWarning),
+                  ),
+                ),
               const SizedBox(height: 12),
               TextField(
                 controller: _searchCtrl,
