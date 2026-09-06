@@ -80,18 +80,21 @@ class HrScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final isReadOnly = !FactoryHubApi.role.canManageHr;
     return DefaultTabController(
-      length: 4,
+      length: 6,
       child: Column(
         children: [
           const Material(
             color: AppColors.surface,
             child: TabBar(
+              isScrollable: true,
               labelColor: AppColors.primary,
               unselectedLabelColor: AppColors.textSecondary,
               indicatorColor: AppColors.primary,
               tabs: [
                 Tab(text: 'Xodimlar'),
                 Tab(text: 'Davomat'),
+                Tab(text: 'Stavkalar'),
+                Tab(text: 'Ishlar'),
                 Tab(text: 'Moliyaviy'),
                 Tab(text: 'Hisobot'),
               ],
@@ -102,6 +105,8 @@ class HrScreen extends StatelessWidget {
               children: [
                 _EmployeesTab(readOnly: isReadOnly),
                 _AttendanceTab(readOnly: isReadOnly),
+                _PieceRatesTab(readOnly: isReadOnly),
+                _WorkRecordsTab(readOnly: isReadOnly),
                 _FinancialTab(readOnly: isReadOnly),
                 const _MonthlyReportTab(),
               ],
@@ -271,6 +276,7 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                                   e['position'],
                                   e['department'],
                                   e['phone'],
+                                  _payLabel(e['payType']?.toString()),
                                   if (e['baseSalary'] != null) '${_fmtNum(e['baseSalary'])} so\'m',
                                 ].where((x) => x != null && x.toString().isNotEmpty).join(' • '),
                               ),
@@ -308,8 +314,14 @@ class _EmployeesTabState extends State<_EmployeesTab> {
   }
 }
 
-String _fmtNum(dynamic v) {
-  if (v == null) return '-';
+String _payLabel(String? payType) => switch (payType) {
+      'piece_rate' => 'Ishbay',
+      'hybrid' => 'Aralash',
+      'salary' => 'Oylik',
+      _ => '',
+    };
+
+String _fmtNum(dynamic v) {  if (v == null) return '-';
   final n = num.tryParse(v.toString());
   if (n == null) return v.toString();
   final f = n % 1 == 0 ? n.toInt().toString() : n.toString();
@@ -342,6 +354,8 @@ class _EmployeeFormSheetState extends State<_EmployeeFormSheet> {
   late String _status = 'active';
   DateTime? _hireDate;
   String? _error;
+  late String _payType = 'salary';
+  int? _userId;
 
   bool get _isNew => widget.employee == null;
 
@@ -357,6 +371,8 @@ class _EmployeeFormSheetState extends State<_EmployeeFormSheet> {
       if (e['baseSalary'] != null) _salaryCtrl.text = e['baseSalary'].toString();
       _noteCtrl.text = e['note']?.toString() ?? '';
       _status = e['status'] ?? 'active';
+      _payType = e['payType']?.toString() ?? 'salary';
+      _userId = e['userId'] as int?;
       final hd = e['hireDate'];
       if (hd != null) _hireDate = DateTime.tryParse(hd.toString());
     } else {
@@ -388,9 +404,11 @@ class _EmployeeFormSheetState extends State<_EmployeeFormSheet> {
       'status': _status,
       'note': _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
       'hireDate': _hireDate == null ? null : DateFormat('yyyy-MM-dd').format(_hireDate!),
+      'payType': _payType,
     };
     final salary = double.tryParse(_salaryCtrl.text.trim().replaceAll(' ', ''));
     if (salary != null) data['baseSalary'] = salary;
+    if (_userId != null) data['userId'] = _userId;
 
     final result = _isNew
         ? await FactoryHubApi.createEmployee(data)
@@ -448,12 +466,27 @@ class _EmployeeFormSheetState extends State<_EmployeeFormSheet> {
               decoration: const InputDecoration(labelText: 'Telefon', border: OutlineInputBorder()),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _salaryCtrl,
-              enabled: !widget.readOnly,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Oylik maosh (so\'m)', border: OutlineInputBorder()),
+            DropdownButtonFormField<String>(
+              initialValue: _payType,
+              decoration: const InputDecoration(labelText: 'Haq turi', border: OutlineInputBorder()),
+              items: const [
+                DropdownMenuItem(value: 'salary', child: Text('Oylik maosh')),
+                DropdownMenuItem(value: 'piece_rate', child: Text('Ishbay')),
+                DropdownMenuItem(value: 'hybrid', child: Text('Aralash (oylik + ishbay)')),
+              ],
+              onChanged: widget.readOnly ? null : (v) => setState(() => _payType = v ?? 'salary'),
             ),
+            const SizedBox(height: 12),
+            if (_payType != 'piece_rate')
+              TextField(
+                controller: _salaryCtrl,
+                enabled: !widget.readOnly,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: _payType == 'hybrid' ? 'Oylik qismi (so\'m)' : 'Oylik maosh (so\'m)',
+                  border: const OutlineInputBorder(),
+                ),
+              ),
             const SizedBox(height: 12),
             InputDecorator(
               decoration: const InputDecoration(labelText: 'Ishga qabul sanasi', border: OutlineInputBorder()),
@@ -703,7 +736,7 @@ class _BulkAttendanceSheetState extends State<_BulkAttendanceSheet> {
     if (errors.isNotEmpty) {
       setState(() => _error = '${errors.length} ta yozuv allaqachon bor (tahrirlash orqali yangilang)');
     } else {
-      Navigator.pop(context, true);
+Navigator.pop(context, <String, dynamic>{'ok': true});
     }
   }
 
@@ -1185,6 +1218,268 @@ class _AdjustmentFormSheetState extends State<_AdjustmentFormSheet> {
   }
 }
 
+// ─── STAVKALAR (piece_rates) ─────────────────────────────────
+
+class _PieceRatesTab extends StatefulWidget {
+  const _PieceRatesTab({required this.readOnly});
+  final bool readOnly;
+
+  @override
+  State<_PieceRatesTab> createState() => _PieceRatesTabState();
+}
+
+class _PieceRatesTabState extends State<_PieceRatesTab> {
+  List<dynamic> _rates = [];
+  bool _loading = true;
+  String _workType = 'mixing';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final result = await FactoryHubApi.getPieceRates(workType: _workType);
+    if (!mounted) return;
+    setState(() {
+      _rates = result['rates'] ?? [];
+      _loading = false;
+    });
+  }
+
+  Future<void> _edit({int? id, Map<String, dynamic>? existing}) async {
+    if (widget.readOnly) return;
+    final rate = TextEditingController();
+    final unit = TextEditingController();
+    if (existing != null) {
+      rate.text = (existing['ratePerUnit'] ?? '').toString();
+      unit.text = (existing['unit'] ?? '').toString();
+    } else {
+      unit.text = 'dona';
+    }
+    final confirmed = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(id == null ? 'Yangi stavka' : 'Stavkani tahrirlash'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<String>(
+              initialValue: _workType,
+              items: const [
+                DropdownMenuItem(value: 'mixing', child: Text('Mixing')),
+                DropdownMenuItem(value: 'packaging', child: Text('Packaging')),
+              ],
+              onChanged: (v) {},
+              decoration: const InputDecoration(labelText: 'Ish turi'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: rate,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Stavka (so\'m/birlik)'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: unit,
+              decoration: const InputDecoration(labelText: 'Birlik (masalan: dona)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Bekor')),
+          FilledButton(
+            onPressed: () {
+              final r = double.tryParse(rate.text);
+              final u = unit.text.trim();
+              if (r != null && r > 0 && u.isNotEmpty) Navigator.pop(ctx, r);
+            },
+            child: const Text('Saqlash'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == null) return;
+    final data = {
+      'workType': _workType,
+      'ratePerUnit': confirmed,
+      'unit': unit.text.trim(),
+    };
+    if (id == null) {
+      await FactoryHubApi.createPieceRate(data);
+    } else {
+      await FactoryHubApi.updatePieceRate(id, data);
+    }
+    _load();
+  }
+
+  Future<void> _delete(int id) async {
+    if (widget.readOnly) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('O\'chirish'),
+        content: const Text('Ushbu stavkani o\'chirishni tasdiqlaysizmi?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Bekor')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('O\'chirish')),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await FactoryHubApi.deletePieceRate(id);
+      _load();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _workType,
+                  items: const [
+                    DropdownMenuItem(value: 'mixing', child: Text('Mixing')),
+                    DropdownMenuItem(value: 'packaging', child: Text('Packaging')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) {
+                      setState(() => _workType = v);
+                      _load();
+                    }
+                  },
+                  decoration: const InputDecoration(labelText: 'Ish turi'),
+                ),
+              ),
+              if (!widget.readOnly) ...[
+                const SizedBox(width: 8),
+                IconButton.filled(
+                  icon: const Icon(Icons.add),
+                  tooltip: 'Yangi stavka',
+                  onPressed: () => _edit(),
+                ),
+              ],
+            ],
+          ),
+        ),
+        Expanded(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: _rates.isEmpty
+                      ? ListView(children: const [
+                          SizedBox(height: 80),
+                          Center(child: Text('Stavkalar topilmadi')),
+                        ])
+                      : ListView.separated(
+                          itemCount: _rates.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (_, i) {
+                            final r = _rates[i];
+                            final itemName = r['itemName'] ?? '';
+                            return ListTile(
+                              title: Text('${r['workType'] ?? ''} stavkasi'
+                                  '${itemName.isEmpty ? '' : ' — $itemName'}'),
+                              subtitle: Text('${_fmtNum((r['ratePerUnit'] ?? 0).toDouble())} so\'m/${r['unit'] ?? ''}'),
+                              trailing: widget.readOnly
+                                  ? null
+                                  : Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.edit, size: 18),
+                                          onPressed: () => _edit(id: r['id'], existing: r),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.delete, size: 18),
+                                          onPressed: () => _delete(r['id']),
+                                        ),
+                                      ],
+                                    ),
+                            );
+                          },
+                        ),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── ISHLAR (work_records) ───────────────────────────────────
+
+class _WorkRecordsTab extends StatefulWidget {
+  const _WorkRecordsTab({required this.readOnly});
+  final bool readOnly;
+
+  @override
+  State<_WorkRecordsTab> createState() => _WorkRecordsTabState();
+}
+
+class _WorkRecordsTabState extends State<_WorkRecordsTab> {
+  List<dynamic> _records = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final result = await FactoryHubApi.getWorkRecords();
+    if (!mounted) return;
+    setState(() {
+      _records = result['records'] ?? [];
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _loading
+        ? const Center(child: CircularProgressIndicator())
+        : RefreshIndicator(
+            onRefresh: _load,
+            child: _records.isEmpty
+                ? ListView(children: const [
+                    SizedBox(height: 80),
+                    Center(child: Text('Ish yozuvlari topilmadi')),
+                  ])
+                : ListView.separated(
+                    itemCount: _records.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (_, i) {
+                      final r = _records[i];
+                      final name = r['employeeName'] ?? '—';
+                      final label = r['employeeName'] ?? name;
+                      return ListTile(
+                        leading: const Icon(Icons.work_outline),
+                        title: Text(label),
+                        subtitle: Text('${r['workType'] ?? ''} · '
+                            '${r['workDate'] ?? ''} · '
+                            '${_fmtNum((r['quantity'] ?? 0).toDouble())} ${r['unit'] ?? ''}'),
+                        trailing: Text(
+                          '${_fmtNum((r['computedAmount'] ?? 0).toDouble())} so\'m',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        isThreeLine: false,
+                      );
+                    },
+                  ),
+          );
+  }
+}
+
 // ─── OYLIK HISOBOT ───────────────────────────────────────────
 
 class _MonthlyReportTab extends StatefulWidget {
@@ -1281,11 +1576,18 @@ class _MonthlyReportTabState extends State<_MonthlyReportTab> {
                         itemCount: _rows.length,
                         itemBuilder: (_, i) {
                           final r = _rows[i];
-                          final base = double.tryParse(r['baseSalary']?.toString() ?? '');
+                          final payType = r['payType']?.toString() ?? 'salary';
+                          final base = double.tryParse(r['baseSalaryComponent']?.toString() ?? '0') ?? 0;
+                          final piece = double.tryParse(r['pieceRateComponent']?.toString() ?? '0') ?? 0;
                           final bonus = double.tryParse(r['totalBonus']?.toString() ?? '0') ?? 0;
                           final penalty = double.tryParse(r['totalPenalty']?.toString() ?? '0') ?? 0;
                           final advance = double.tryParse(r['totalAdvance']?.toString() ?? '0') ?? 0;
-                          final net = base == null ? null : base + bonus - penalty - advance;
+                          final net = double.tryParse(r['netAmount']?.toString() ?? '');
+                          final payLabel = switch (payType) {
+                            'piece_rate' => 'Ishbay',
+                            'hybrid' => 'Aralash',
+                            _ => 'Oylik',
+                          };
                           return Card(
                             margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
                             child: Padding(
@@ -1303,7 +1605,7 @@ class _MonthlyReportTabState extends State<_MonthlyReportTab> {
                                         ),
                                       ),
                                       Text(
-                                        net == null ? 'Maosh kiritilmagan' : 'Sof: ${_fmtNum(net)}',
+                                        net == null ? 'Hisob yo\'q' : 'Jami: ${_fmtNum(net)}',
                                         style: TextStyle(
                                           fontWeight: FontWeight.w700,
                                           color: net == null ? AppColors.textSecondary : AppColors.primary,
@@ -1316,17 +1618,16 @@ class _MonthlyReportTabState extends State<_MonthlyReportTab> {
                                     spacing: 8,
                                     runSpacing: 4,
                                     children: [
+                                      _stat('Haq turi', payLabel),
                                       _stat('Keldi', r['daysPresent']),
                                       _stat('Kelmadi', r['daysAbsent']),
                                       _stat('Kech', r['daysLate']),
-                                      _stat('Kasal', r['daysSick']),
-                                      _stat('Ta\'til', r['daysVacation']),
                                       _stat('Soat', r['totalHours']),
                                     ],
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
-                                    'Premiya: ${_fmtNum(bonus)}  •  Jarima: ${_fmtNum(penalty)}  •  Avans: ${_fmtNum(advance)}',
+                                    'Oylik: ${_fmtNum(base)}  •  Ishbay: ${_fmtNum(piece)}  •  Premiya: ${_fmtNum(bonus)}  •  Jarima: ${_fmtNum(penalty)}  •  Avans: ${_fmtNum(advance)}',
                                     style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                                   ),
                                   if (r['position'] != null || r['department'] != null)

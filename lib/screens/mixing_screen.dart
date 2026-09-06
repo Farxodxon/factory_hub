@@ -13,8 +13,10 @@ class MixingScreen extends StatefulWidget {
 
 class _MixingScreenState extends State<MixingScreen> {
   List<dynamic> _boms = [];
+  List<dynamic> _pieceEmployees = [];
   final _qty = TextEditingController();
   int? _bomId;
+  int? _employeeId;
   bool _loading = true;
   bool _previewing = false;
   bool _submitting = false;
@@ -38,12 +40,21 @@ class _MixingScreenState extends State<MixingScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     final result = await FactoryHubApi.getBoms();
+    var piece = <dynamic>[];
+    try {
+      final hr = await FactoryHubApi.getEmployees();
+      piece = (hr['employees'] ?? [])
+          .where((e) => (e['status'] ?? 'active') == 'active' &&
+              ['piece_rate', 'hybrid'].contains(e['payType']))
+          .toList();
+    } catch (_) {}
     if (!mounted) return;
     final boms = (result['boms'] ?? [])
         .where((b) => b['stage'] == 'mixing')
         .toList();
     setState(() {
       _boms = boms;
+      _pieceEmployees = piece;
       _loading = false;
     });
   }
@@ -86,7 +97,11 @@ class _MixingScreenState extends State<MixingScreen> {
       _submitting = true;
       _error = null;
     });
-    final result = await FactoryHubApi.startMixing(bomId: _bomId!, outputQuantity: qty);
+    final result = await FactoryHubApi.startMixing(
+      bomId: _bomId!,
+      outputQuantity: qty,
+      employeeId: _employeeId,
+    );
     if (!mounted) return;
     setState(() => _submitting = false);
     if (result['error'] != null) {
@@ -100,6 +115,12 @@ class _MixingScreenState extends State<MixingScreen> {
       content: Text(result['message'] ?? 'Boshlang\'di'),
       backgroundColor: AppColors.statusOk,
     ));
+    if (result['warning'] != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(result['warning']),
+        backgroundColor: AppColors.statusWarning,
+      ));
+    }
     setState(() {
       _preview = null;
       _required = [];
@@ -154,6 +175,25 @@ class _MixingScreenState extends State<MixingScreen> {
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
+                  if (_pieceEmployees.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<int>(
+                      initialValue: _employeeId,
+                      items: [
+                        const DropdownMenuItem<int>(value: null, child: Text('— Tanlanmagan —')),
+                        ..._pieceEmployees.map<DropdownMenuItem<int>>((e) => DropdownMenuItem(
+                              value: e['id'],
+                              child: Text('${e['fullName']} '
+                                  '${(e['payType'] == 'hybrid') ? '(aralash)' : '(ishbay)'}'),
+                            )),
+                      ],
+                      onChanged: (v) => setState(() => _employeeId = v),
+                      decoration: InputDecoration(
+                        labelText: 'Kim bajaryapti (ixtiyoriy)',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   FilledButton.icon(
                     onPressed: _previewing ? null : _previewAction,

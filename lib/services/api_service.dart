@@ -245,8 +245,7 @@ class FactoryHubApi {
       _put('/hr/attendance/$id', data);
 
   // ─── HR: Premiya/Jarima/Avans ──────────────────────────────
-  static Future<Map<String, dynamic>> getSalaryAdjustments({
-    int? employeeId,
+  static Future<Map<String, dynamic>> getSalaryAdjustments({    int? employeeId,
     String? type,
     String? status,
     String? from,
@@ -269,6 +268,41 @@ class FactoryHubApi {
 
   static Future<Map<String, dynamic>> rejectSalaryAdjustment(int id) async =>
       _put('/hr/salary-adjustments/$id/reject', {});
+
+  // ─── HR: Stavkalar (piece_rates) ───────────────────────────
+  static Future<Map<String, dynamic>> getPieceRates({String? workType}) async {
+    final q = <String>[];
+    if (workType != null && workType.isNotEmpty) q.add('work_type=$workType');
+    return _get('/hr/piece-rates${q.isEmpty ? '' : '?${q.join('&')}'}');
+  }
+
+  static Future<Map<String, dynamic>> createPieceRate(Map<String, dynamic> data) async =>
+      _post('/hr/piece-rates', data);
+
+  static Future<Map<String, dynamic>> updatePieceRate(int id, Map<String, dynamic> data) async =>
+      _put('/hr/piece-rates/$id', data);
+
+  static Future<Map<String, dynamic>> deletePieceRate(int id) async =>
+      _delete('/hr/piece-rates/$id');
+
+  // ─── HR: Ish yozuvlari (work_records) ──────────────────────
+  static Future<Map<String, dynamic>> getWorkRecords({
+    int? employeeId,
+    String? month,
+    String? workType,
+  }) {
+    final q = <String>[];
+    if (employeeId != null) q.add('employee_id=$employeeId');
+    if (month != null && month.isNotEmpty) q.add('month=$month');
+    if (workType != null && workType.isNotEmpty) q.add('work_type=$workType');
+    return _get('/hr/work-records${q.isEmpty ? '' : '?${q.join('&')}'}');
+  }
+
+  static Future<Map<String, dynamic>> createWorkRecord(Map<String, dynamic> data) async =>
+      _post('/hr/work-records', data);
+
+  static Future<Map<String, dynamic>> deleteWorkRecord(int id) async =>
+      _delete('/hr/work-records/$id');
 
   // ─── HR: Oylik hisobot ─────────────────────────────────────
   static Future<Map<String, dynamic>> getMonthlyReport({
@@ -392,8 +426,13 @@ class FactoryHubApi {
   static Future<Map<String, dynamic>> startMixing({
     required int bomId,
     required double outputQuantity,
+    int? employeeId,
   }) async =>
-      _post('/production/mixing/start', {'bom_id': bomId, 'output_quantity': outputQuantity});
+      _post('/production/mixing/start', {
+        'bom_id': bomId,
+        'output_quantity': outputQuantity,
+        if (employeeId != null) 'employee_id': employeeId,
+      });
 
   // ─── Qadoqlash (Packaging) ─────────────────────────
   static Future<Map<String, dynamic>> packagingPreview({
@@ -406,11 +445,13 @@ class FactoryHubApi {
     required int bomId,
     required double outputQuantity,
     required int destWarehouseId,
+    int? employeeId,
   }) async =>
       _post('/production/packaging/start', {
         'bom_id': bomId,
         'output_quantity': outputQuantity,
         'dest_warehouse_id': destWarehouseId,
+        if (employeeId != null) 'employee_id': employeeId,
       });
 
   // ─── Tasdiqlash zanjiri (pending transfers) ────────

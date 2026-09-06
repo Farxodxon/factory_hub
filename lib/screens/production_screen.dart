@@ -536,11 +536,13 @@ class _BomBatchSheet extends StatefulWidget {
 class _BomBatchSheetState extends State<_BomBatchSheet> {
   List<dynamic> _boms = [];
   List<dynamic> _warehouses = [];
+  List<dynamic> _pieceEmployees = [];
 
   int? _bomId;
   int _batches = 1;
   int? _sourceWhId;
   int? _destWhId;
+  int? _employeeId;
   bool _loading = true;
   String? _error;
   List<dynamic> _shortages = [];
@@ -556,10 +558,19 @@ class _BomBatchSheetState extends State<_BomBatchSheet> {
     setState(() => _loading = true);
     final bomsResult = await FactoryHubApi.getBoms();
     final whResult = await FactoryHubApi.getWarehouses();
+    var piece = <dynamic>[];
+    try {
+      final hr = await FactoryHubApi.getEmployees();
+      piece = (hr['employees'] ?? [])
+          .where((e) => (e['status'] ?? 'active') == 'active' &&
+              ['piece_rate', 'hybrid'].contains(e['payType']))
+          .toList();
+    } catch (_) {}
     if (!mounted) return;
     setState(() {
       _boms = bomsResult['boms'] ?? [];
       _warehouses = whResult['warehouses'] ?? [];
+      _pieceEmployees = piece;
       _loading = false;
     });
   }
@@ -694,6 +705,25 @@ class _BomBatchSheetState extends State<_BomBatchSheet> {
                         ),
                       ),
                       const SizedBox(height: 12),
+                      if (_pieceEmployees.isNotEmpty) ...[
+                        DropdownButtonFormField<int>(
+                          initialValue: _employeeId,
+                          items: [
+                            const DropdownMenuItem<int>(value: null, child: Text('— Tanlanmagan —')),
+                            ..._pieceEmployees.map<DropdownMenuItem<int>>((e) => DropdownMenuItem(
+                                  value: e['id'],
+                                  child: Text('${e['fullName']} '
+                                      '${(e['payType'] == 'hybrid') ? '(aralash)' : '(ishbay)'}'),
+                                )),
+                          ],
+                          onChanged: (v) => setState(() => _employeeId = v),
+                          decoration: InputDecoration(
+                            labelText: 'Kim bajaryapti (ixtiyoriy)',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                       Row(
                         children: [
                           IconButton(
@@ -796,6 +826,7 @@ class _BomBatchSheetState extends State<_BomBatchSheet> {
       'batches': _batches,
       'source_warehouse_id': _sourceWhId,
       'dest_warehouse_id': _destWhId,
+      if (_employeeId != null) 'employee_id': _employeeId,
     });
     if (!mounted) return;
     setState(() => _submitting = false);
@@ -818,6 +849,14 @@ class _BomBatchSheetState extends State<_BomBatchSheet> {
           backgroundColor: AppColors.statusOk,
         ),
       );
+      if (result['warning'] != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['warning']!),
+            backgroundColor: AppColors.statusWarning,
+          ),
+        );
+      }
     }
     Navigator.pop(context, true);
   }

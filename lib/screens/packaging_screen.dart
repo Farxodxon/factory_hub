@@ -13,9 +13,11 @@ class PackagingScreen extends StatefulWidget {
 
 class _PackagingScreenState extends State<PackagingScreen> {
   List<dynamic> _boms = [];
+  List<dynamic> _pieceEmployees = [];
   final _qty = TextEditingController();
   int? _bomId;
   int? _destWhId;
+  int? _employeeId;
   bool _loading = true;
   bool _previewing = false;
   bool _submitting = false;
@@ -41,6 +43,14 @@ class _PackagingScreenState extends State<PackagingScreen> {
     setState(() => _loading = true);
     final bomsResult = await FactoryHubApi.getBoms();
     final whResult = await FactoryHubApi.getWarehouses();
+    var piece = <dynamic>[];
+    try {
+      final hr = await FactoryHubApi.getEmployees();
+      piece = (hr['employees'] ?? [])
+          .where((e) => (e['status'] ?? 'active') == 'active' &&
+              ['piece_rate', 'hybrid'].contains(e['payType']))
+          .toList();
+    } catch (_) {}
     final allWh = (whResult['warehouses'] ?? []) as List<dynamic>;
     final finishWh = allWh.where((w) => w['type'] == 'finished').toList();
     if (!mounted) return;
@@ -49,6 +59,7 @@ class _PackagingScreenState extends State<PackagingScreen> {
         .toList();
     setState(() {
       _boms = boms;
+      _pieceEmployees = piece;
       _destWarehouses = finishWh;
       _destWhId = finishWh.isNotEmpty ? finishWh.first['id'] as int : null;
       _loading = false;
@@ -101,6 +112,7 @@ class _PackagingScreenState extends State<PackagingScreen> {
       bomId: _bomId!,
       outputQuantity: qty,
       destWarehouseId: _destWhId!,
+      employeeId: _employeeId,
     );
     if (!mounted) return;
     setState(() => _submitting = false);
@@ -115,6 +127,12 @@ class _PackagingScreenState extends State<PackagingScreen> {
       content: Text(result['message'] ?? 'Boshlang\'di'),
       backgroundColor: AppColors.statusOk,
     ));
+    if (result['warning'] != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(result['warning']),
+        backgroundColor: AppColors.statusWarning,
+      ));
+    }
     setState(() {
       _preview = null;
       _required = [];
@@ -182,6 +200,25 @@ class _PackagingScreenState extends State<PackagingScreen> {
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
+                  if (_pieceEmployees.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<int>(
+                      initialValue: _employeeId,
+                      items: [
+                        const DropdownMenuItem<int>(value: null, child: Text('— Tanlanmagan —')),
+                        ..._pieceEmployees.map<DropdownMenuItem<int>>((e) => DropdownMenuItem(
+                              value: e['id'],
+                              child: Text('${e['fullName']} '
+                                  '${(e['payType'] == 'hybrid') ? '(aralash)' : '(ishbay)'}'),
+                            )),
+                      ],
+                      onChanged: (v) => setState(() => _employeeId = v),
+                      decoration: InputDecoration(
+                        labelText: 'Kim bajaryapti (ixtiyoriy)',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   FilledButton.icon(
                     onPressed: _previewing ? null : _previewAction,
