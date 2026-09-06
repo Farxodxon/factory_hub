@@ -321,6 +321,13 @@ String _payLabel(String? payType) => switch (payType) {
       _ => '',
     };
 
+bool _hasOt(dynamic r) {
+  final ot = r['overtimeHours'] ?? r['totalOvertimeHours'];
+  if (ot == null) return false;
+  final n = num.tryParse(ot.toString());
+  return n != null && n > 0;
+}
+
 String _fmtNum(dynamic v) {  if (v == null) return '-';
   final n = num.tryParse(v.toString());
   if (n == null) return v.toString();
@@ -657,7 +664,8 @@ class _AttendanceTabState extends State<_AttendanceTab> {
                               title: Text(r['employeeName'] ?? ''),
                               subtitle: Text(
                                 'Kirish: ${r['checkIn'] ?? '-'} • Chiqish: ${r['checkOut'] ?? '-'} • '
-                                'Soat: ${r['hoursWorked'] ?? '-'}',
+                                'Soat: ${r['hoursWorked'] ?? '-'}'
+                                '${_hasOt(r) ? ' • Qo\'shimcha: ${_fmtNum(r['overtimeHours'])}' : ''}',
                               ),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -724,8 +732,16 @@ class _BulkAttendanceSheetState extends State<_BulkAttendanceSheet> {
   Future<void> _submit() async {
     final records = _employees
         .where((e) => _statuses[e['id']] != null)
-        .map((e) => {'employeeId': e['id'], 'status': _statuses[e['id']]})
-        .toList();
+        .map((e) {
+      final st = _statuses[e['id']]!;
+      final present = st == 'present' || st == 'late';
+      return <String, dynamic>{
+        'employeeId': e['id'],
+        'status': st,
+        if (present) 'checkIn': '08:00',
+        if (present) 'checkOut': '18:00',
+      };
+    }).toList();
     if (records.isEmpty) return;
     final result = await FactoryHubApi.addAttendanceBulk({
       'workDate': widget.workDate,
@@ -833,9 +849,10 @@ class _AttendanceFormSheet extends StatefulWidget {
 
 class _AttendanceFormSheetState extends State<_AttendanceFormSheet> {
   late String _status;
-  final _inCtrl = TextEditingController();
-  final _outCtrl = TextEditingController();
+  TimeOfDay? _inTime;
+  TimeOfDay? _outTime;
   final _noteCtrl = TextEditingController();
+  final _otCtrl = TextEditingController();
   String? _error;
 
   @override
@@ -843,16 +860,75 @@ class _AttendanceFormSheetState extends State<_AttendanceFormSheet> {
     super.initState();
     final r = widget.record;
     _status = r['status'] ?? 'present';
-    _inCtrl.text = r['checkIn']?.toString() ?? '';
-    _outCtrl.text = r['checkOut']?.toString() ?? '';
+    _inTime = _parseTime(r['checkIn']) ?? const TimeOfDay(hour: 8, minute: 0);
+    _outTime = _parseTime(r['checkOut']) ?? const TimeOfDay(hour: 18, minute: 0);
     _noteCtrl.text = r['note']?.toString() ?? '';
+    final ot = r['overtimeHours'];
+    if (ot != null && ot.toString() != '0' && ot.toString() != '0.0') {
+      _otCtrl.text = ot.toString();
+    }
+  }
+
+  TimeOfDay? _parseTime(dynamic v) {
+    if (v == null) return null;
+    final parts = v.toString().split(':');
+    if (parts.length < 2) return null;
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (h == null || m == null) return null;
+    return TimeOfDay(hour: h, minute: m);
+  }
+
+  String _fmt(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  // Asosiy ish vaqti: obed (tushlik) hisobga olinib, 8 soatgacha.
+  double? get _previewHours {
+    if (_inTime == null || _outTime == null) return null;
+    var mins = (_outTime!.hour * 60 + _outTime!.minute) -
+        (_inTime!.hour * 60 + _inTime!.minute);
+    if (mins < 0) mins += 1440;
+    final d = mins / 60.0;
+    final capped = d > 8 ? 8.0 : d;
+    return double.parse(capped.toStringAsFixed(2));
+  }
+
+  Future<void> _pickIn() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _inTime ?? const TimeOfDay(hour: 8, minute: 0),
+    );
+    if (picked != null) setState(() => _inTime = picked);
+  }
+
+  Future<void> _pickOut() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _outTime ?? const TimeOfDay(hour: 18, minute: 0),
+    );
+    if (picked != null) setState(() => _outTime = picked);
   }
 
   Future<void> _submit() async {
+    final otText = _otCtrl.text.trim().replaceAll(' ', '');
+    var ot = 0.0;
+    if (otText.isNotEmpty) {
+      final parsed = double.tryParse(otText);
+      if (parsed == null || parsed < 0) {
+        setState(() => _error = 'Qo\'shimcha ish soati raqam bo\'lishi kerak (masalan: 2.5)');
+        return;
+      }
+      ot = parsed;
+    }
+    if (_inTime == null || _outTime == null) {
+      setState(() => _error = 'Kirish va chiqish vaqtini tanlang');
+      return;
+    }
     final data = <String, dynamic>{
       'status': _status,
-      'checkIn': _inCtrl.text.trim().isEmpty ? '' : _inCtrl.text.trim(),
-      'checkOut': _outCtrl.text.trim().isEmpty ? '' : _outCtrl.text.trim(),
+      'checkIn': _fmt(_inTime!),
+      'checkOut': _fmt(_outTime!),
+      'overtimeHours': ot,
       'note': _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
     };
     final result = await FactoryHubApi.updateAttendance(widget.record['id'], data);
@@ -864,8 +940,24 @@ class _AttendanceFormSheetState extends State<_AttendanceFormSheet> {
     Navigator.pop(context, true);
   }
 
+  Widget _timeField(String label, TimeOfDay? t, VoidCallback onTap) {
+    return InkWell(
+      onTap: widget.readOnly ? null : onTap,
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          prefixIcon: const Icon(Icons.access_time),
+        ),
+        child: Text(t == null ? '' : _fmt(t),
+            style: const TextStyle(fontSize: 16)),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final preview = _previewHours;
     return Padding(
       padding: EdgeInsets.only(
         left: 16,
@@ -899,23 +991,26 @@ class _AttendanceFormSheetState extends State<_AttendanceFormSheet> {
               onChanged: widget.readOnly ? null : (v) => setState(() => _status = v ?? 'present'),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _inCtrl,
-              enabled: !widget.readOnly,
-              decoration: const InputDecoration(
-                labelText: 'Kirish vaqti (HH:MM)',
-                border: OutlineInputBorder(),
-                hintText: '09:00',
+            _timeField('Ishga kelish vaqti', _inTime, _pickIn),
+            const SizedBox(height: 12),
+            _timeField('Ishdan ketish vaqti', _outTime, _pickOut),
+            if (preview != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Asosiy ish vaqti: ${_fmtNum(preview)} soat'
+                '${preview == 8 ? ' (obed bilan cheklangan)' : ''}',
+                style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
               ),
-            ),
+            ],
             const SizedBox(height: 12),
             TextField(
-              controller: _outCtrl,
+              controller: _otCtrl,
               enabled: !widget.readOnly,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
-                labelText: 'Chiqish vaqti (HH:MM)',
+                labelText: 'Qo\'shimcha ish soati (soatda, masalan: 2.5)',
                 border: OutlineInputBorder(),
-                hintText: '18:00',
+                hintText: '0',
               ),
             ),
             const SizedBox(height: 12),
@@ -1623,6 +1718,8 @@ class _MonthlyReportTabState extends State<_MonthlyReportTab> {
                                       _stat('Kelmadi', r['daysAbsent']),
                                       _stat('Kech', r['daysLate']),
                                       _stat('Soat', r['totalHours']),
+                                      _stat('Qo\'shimcha',
+                                          _hasOt(r) ? r['totalOvertimeHours'] : '-'),
                                     ],
                                   ),
                                   const SizedBox(height: 6),
