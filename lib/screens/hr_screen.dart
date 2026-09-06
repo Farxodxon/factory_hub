@@ -418,7 +418,7 @@ class _EmployeeFormSheetState extends State<_EmployeeFormSheet> {
       setState(() => _error = result['error']);
       return;
     }
-    Navigator.pop(context, true);
+    Navigator.pop(context, <String, dynamic>{'ok': true});
   }
 
   @override
