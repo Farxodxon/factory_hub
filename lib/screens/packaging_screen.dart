@@ -179,7 +179,7 @@ class _PackagingScreenState extends State<PackagingScreen> {
                       style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 4),
                   const Text(
-                    'Yarim tayyor va qadoqlash materiallari darhol sarflanadi, natija tanlangan tayyor omborga tasdiqlash bilan kiradi.',
+                    'Yarim tayyor va qadoqlash materiallari darhol sarflanadi, natija tanlangan tayyor mahsulot omboriga darhol o\'tadi.',
                     style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
                   ),
                   const SizedBox(height: 16),

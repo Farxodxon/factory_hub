@@ -73,6 +73,16 @@ class _RecipesScreenState extends State<RecipesScreen> {
     if (saved == true && mounted) _load();
   }
 
+  Future<void> _openFullWizard() async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      isDismissible: false,
+      builder: (_) => _FullProductWizard(items: _items),
+    );
+    if (saved == true && mounted) _load();
+  }
+
   Future<void> _openCreateMenu() async {
     final choice = await showDialog<String>(
       context: context,
@@ -87,6 +97,10 @@ class _RecipesScreenState extends State<RecipesScreen> {
             onPressed: () => Navigator.pop(ctx, 'item'),
             child: const Text('Mahsulot yaratish'),
           ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 'full'),
+            child: const Text('Tayyor mahsulot (to\'liq tarkib)'),
+          ),
         ],
       ),
     );
@@ -95,6 +109,8 @@ class _RecipesScreenState extends State<RecipesScreen> {
       await _openForm();
     } else if (choice == 'item') {
       await showCreateItemSheet(context, onCreated: _load);
+    } else if (choice == 'full') {
+      await _openFullWizard();
     }
   }
 
@@ -555,6 +571,528 @@ class _RecipeFormSheetState extends State<_RecipeFormSheet> {
           ),
           IconButton(
             onPressed: () => _removeIngredient(index),
+            icon: const Icon(Icons.remove_circle_outline, color: AppColors.statusCritical),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FullProductWizard extends StatefulWidget {
+  const _FullProductWizard({required this.items});
+
+  final List<dynamic> items;
+
+  @override
+  State<_FullProductWizard> createState() => _FullProductWizardState();
+}
+
+class _WizIngRow {
+  int? itemId;
+  final TextEditingController qtyCtrl;
+  _WizIngRow(this.itemId, this.qtyCtrl);
+}
+
+class _FullProductWizardState extends State<_FullProductWizard> {
+  final Map<int, Map<String, dynamic>> _itemById = {};
+
+  int _step = 0;
+
+  final _prodNameCtrl = TextEditingController();
+  final _prodUnitCtrl = TextEditingController();
+
+  int? _semiId;
+  final _mixQtyCtrl = TextEditingController();
+  final _mixUnitCtrl = TextEditingController();
+  final List<_WizIngRow> _mixRows = [_WizIngRow(null, TextEditingController())];
+
+  final _pkgQtyCtrl = TextEditingController();
+  final _pkgUnitCtrl = TextEditingController();
+  final _semiQtyCtrl = TextEditingController(text: '1');
+  final _semiNameCtrl = TextEditingController();
+  final List<_WizIngRow> _pkgRows = [];
+
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    for (final it in widget.items) {
+      _itemById[(it['id'] as num).toInt()] = it as Map<String, dynamic>;
+    }
+  }
+
+  @override
+  void dispose() {
+    _prodNameCtrl.dispose();
+    _prodUnitCtrl.dispose();
+    _mixQtyCtrl.dispose();
+    _mixUnitCtrl.dispose();
+    _pkgQtyCtrl.dispose();
+    _pkgUnitCtrl.dispose();
+    _semiQtyCtrl.dispose();
+    _semiNameCtrl.dispose();
+    for (final r in [..._mixRows, ..._pkgRows]) {
+      r.qtyCtrl.dispose();
+    }
+    super.dispose();
+  }
+
+  static const _semiTypes = {'semi_finished', 'intermediate', 'semi'};
+
+  List<Map<String, dynamic>> get _semiCandidates => widget.items
+      .where((i) => _semiTypes.contains(i['itemType']))
+      .cast<Map<String, dynamic>>()
+      .toList();
+
+  double _parsed(TextEditingController c) =>
+      double.tryParse(c.text.replaceAll(',', '.')) ?? 0;
+
+  List<Map<String, dynamic>> _buildItems(List<_WizIngRow> rows) {
+    final out = <Map<String, dynamic>>[];
+    for (final row in rows) {
+      final id = row.itemId;
+      if (id == null) continue;
+      final qty = _parsed(row.qtyCtrl);
+      if (qty <= 0) continue;
+      final it = _itemById[id]!;
+      out.add({
+        'item_type': it['itemType'],
+        'ref_id': id,
+        'ref_barcode': null,
+        'name': it['name'],
+        'unit': it['unit'],
+        'qty': qty,
+      });
+    }
+    return out;
+  }
+
+  void _onSemiChanged(int? id) {
+    setState(() {
+      _semiId = id;
+      _mixUnitCtrl.text = id != null ? (_itemById[id]?['unit']?.toString() ?? 'dona') : '';
+      _semiNameCtrl.text = id != null ? (_itemById[id]?['name']?.toString() ?? '') : '';
+      if (_pkgUnitCtrl.text.trim().isEmpty && id != null) {
+        _pkgUnitCtrl.text = _itemById[id]?['unit']?.toString() ?? 'dona';
+      }
+    });
+  }
+
+  void _next() {
+    if (_step == 0) {
+      if (_prodNameCtrl.text.trim().isEmpty || _prodUnitCtrl.text.trim().isEmpty) {
+        setState(() => _error = 'Mahsulot nomi va o\'lchov birligini kiriting');
+        return;
+      }
+    } else if (_step == 1) {
+      if (_semiId == null || _parsed(_mixQtyCtrl) <= 0) {
+        setState(() => _error = 'Yarim tayyor mahsulot va chiqish miqdorini (>0) tanlang');
+        return;
+      }
+      if (_buildItems(_mixRows).isEmpty) {
+        setState(() => _error = 'Aralashtirish tarkibiga kamida bitta qator qo\'shing (mahsulot + miqdor)');
+        return;
+      }
+    }
+    setState(() {
+      _error = null;
+      _step = _step + 1;
+    });
+  }
+
+  Future<void> _save() async {
+    final prodName = _prodNameCtrl.text.trim();
+    final prodUnit = _prodUnitCtrl.text.trim();
+    final semi = _itemById[_semiId];
+    final mixQty = _parsed(_mixQtyCtrl);
+    final pkgQty = _parsed(_pkgQtyCtrl) > 0 ? _parsed(_pkgQtyCtrl) : mixQty;
+    final semiQty = _parsed(_semiQtyCtrl);
+    if (prodName.isEmpty || prodUnit.isEmpty || semi == null ||
+        mixQty <= 0 || pkgQty <= 0 || semiQty <= 0) {
+      setState(() => _error = 'Barcha majburiy maydonlarni to\'ldiring');
+      return;
+    }
+    final mixItems = _buildItems(_mixRows);
+    if (mixItems.isEmpty) {
+      setState(() => _error = 'Aralashtirish tarkibiga kamida bitta qator qo\'shing');
+      return;
+    }
+    final pkgItems = <Map<String, dynamic>>[
+      {
+        'item_type': semi['itemType'],
+        'ref_id': _semiId,
+        'ref_barcode': null,
+        'name': semi['name'],
+        'unit': semi['unit'],
+        'qty': semiQty,
+      },
+      ..._buildItems(_pkgRows),
+    ];
+
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+
+    final prodRes = await FactoryHubApi.createItem({
+      'name': prodName,
+      'item_type': 'finished',
+      'unit': prodUnit,
+    });
+    if (prodRes['error'] != null) {
+      setState(() {
+        _saving = false;
+        _error = prodRes['error'];
+      });
+      return;
+    }
+    final prodId = ((prodRes['item'] as Map<String, dynamic>?)?['id'] as num?)?.toInt();
+    if (prodId == null) {
+      setState(() {
+        _saving = false;
+        _error = 'Mahsulot yaratilmadi (id yo\'q)';
+      });
+      return;
+    }
+
+    final mixBom = await FactoryHubApi.createBom({
+      'name': '$prodName (aralashtirish)',
+      'stage': 'mixing',
+      'output_item_id': _semiId,
+      'output_qty': mixQty,
+      'output_unit': _mixUnitCtrl.text.trim().isEmpty
+          ? (semi['unit'] ?? 'dona')
+          : _mixUnitCtrl.text.trim(),
+      'items': mixItems,
+    });
+    if (mixBom['error'] != null) {
+      setState(() {
+        _saving = false;
+        _error = mixBom['error'];
+      });
+      return;
+    }
+
+    final pkgBom = await FactoryHubApi.createBom({
+      'name': '$prodName (qadoqlash)',
+      'stage': 'packaging',
+      'output_item_id': prodId,
+      'output_qty': pkgQty,
+      'output_unit': _pkgUnitCtrl.text.trim().isEmpty
+          ? prodUnit
+          : _pkgUnitCtrl.text.trim(),
+      'items': pkgItems,
+    });
+    if (pkgBom['error'] != null) {
+      setState(() {
+        _saving = false;
+        _error = pkgBom['error'];
+      });
+      return;
+    }
+    if (!mounted) return;
+    Navigator.pop(context, true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16, right: 16, top: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.88,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              _step == 0
+                  ? '1/3 — TAYYOR MAHSULOT'
+                  : _step == 1
+                      ? '2/3 — ARALASHTIRISH BOSQICHI'
+                      : '3/3 — QADOQLASH BOSQICHI',
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Yangi mahsulot: tayyor mahsulot + aralashtirish retsepti + qadoqlash retsepti birgalikda yaratiladi.',
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: SingleChildScrollView(
+                child: _step == 0
+                    ? _step1()
+                    : _step == 1
+                        ? _step2()
+                        : _step3(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                if (_step > 0)
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _saving ? null : () => setState(() {
+                        _error = null;
+                        _step = _step - 1;
+                      }),
+                      icon: const Icon(Icons.arrow_back),
+                      label: const Text('Orqaga'),
+                    ),
+                  ),
+                if (_step > 0) const SizedBox(width: 12),
+                Expanded(
+                  flex: _step > 0 ? 2 : 1,
+                  child: FilledButton.icon(
+                    onPressed: _saving
+                        ? null
+                        : _step < 2
+                            ? _next
+                            : _save,
+                    icon: _saving
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : Icon(_step < 2 ? Icons.arrow_forward : Icons.check),
+                    label: Text(_step < 2 ? 'Davom etish' : 'Yaratish'),
+                    style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _step1() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _prodNameCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Mahsulot nomi',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _prodUnitCtrl,
+          decoration: const InputDecoration(
+            labelText: 'O\'lchov birligi',
+            hintText: 'masalan: dona, quti, litr',
+            border: OutlineInputBorder(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _step2() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<int>(
+          initialValue: _semiId,
+          items: _semiCandidates.map<DropdownMenuItem<int>>((i) => DropdownMenuItem(
+              value: (i['id'] as num).toInt(),
+              child: Text('${i['name']} (${i['itemType']})', maxLines: 1, overflow: TextOverflow.ellipsis))).toList(),
+          onChanged: _onSemiChanged,
+          decoration: const InputDecoration(
+            labelText: 'Chiqadigan yarim tayyor mahsulot',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _mixQtyCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Partiya chiqish miqdori',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: _mixUnitCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Birlik',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            const Text('Xom ashyo tarkibi', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.primary)),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: () => setState(() => _mixRows.add(_WizIngRow(null, TextEditingController()))),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Qator qo\'shish'),
+            ),
+          ],
+        ),
+        for (var i = 0; i < _mixRows.length; i++) _wizRow(i, _mixRows),
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          Text(_error!, style: const TextStyle(color: AppColors.statusCritical, fontSize: 13)),
+        ],
+      ],
+    );
+  }
+
+  Widget _step3() {
+    final prodName = _prodNameCtrl.text.trim();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Chiqadigan mahsulot: ${prodName.isEmpty ? '(belgilanmagan)' : prodName}',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _pkgQtyCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Partiya chiqish miqdori',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: _pkgUnitCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Birlik',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        const Text('Qadoqlash tarkibi', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.primary)),
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 3,
+                child: TextField(
+                  enabled: false,
+                  controller: _semiNameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Yarim tayyor',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: TextField(
+                  controller: _semiQtyCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Miqdor',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 48),
+            ],
+          ),
+        ),
+        Row(
+          children: [
+            const Spacer(),
+            TextButton.icon(
+              onPressed: () => setState(() => _pkgRows.add(_WizIngRow(null, TextEditingController()))),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Qadoqlash materiali qo\'shish'),
+            ),
+          ],
+        ),
+        for (var i = 0; i < _pkgRows.length; i++) _wizRow(i, _pkgRows),
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          Text(_error!, style: const TextStyle(color: AppColors.statusCritical, fontSize: 13)),
+        ],
+      ],
+    );
+  }
+
+  Widget _wizRow(int index, List<_WizIngRow> rows) {
+    final row = rows[index];
+    final usedByIds = rows.asMap().entries
+        .where((e) => e.key != index)
+        .map((e) => e.value.itemId)
+        .whereType<int>()
+        .toSet();
+    final items = widget.items
+        .where((i) => !usedByIds.contains((i['id'] as num).toInt()));
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            flex: 3,
+            child: DropdownButtonFormField<int>(
+              initialValue: row.itemId,
+              items: items.map<DropdownMenuItem<int>>((i) => DropdownMenuItem(
+                  value: (i['id'] as num).toInt(),
+                  child: Text('${i['name']} (${i['itemType']})',
+                      maxLines: 1, overflow: TextOverflow.ellipsis))).toList(),
+              onChanged: (v) => setState(() => row.itemId = v),
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Mahsulot',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 2,
+            child: TextField(
+              controller: row.qtyCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Miqdor',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: () => setState(() {
+              row.qtyCtrl.dispose();
+              rows.removeAt(index);
+            }),
             icon: const Icon(Icons.remove_circle_outline, color: AppColors.statusCritical),
           ),
         ],
