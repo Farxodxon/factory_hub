@@ -21,31 +21,31 @@ import 'thresholds_screen.dart';
 import 'users_screen.dart';
 import 'warehouses_screen.dart';
 
-Widget? moduleScreenFor(String key) {
+Widget? moduleScreenFor(String key, ValueNotifier<int>? refreshNotifier) {
   switch (key) {
     case 'hr':
-      return const HrScreen();
+      return HrScreen(refreshNotifier: refreshNotifier);
     case 'production':
-      return const MixingScreen();
+      return MixingScreen(refreshNotifier: refreshNotifier);
     case 'packaging':
-      return const PackagingScreen();
+      return PackagingScreen(refreshNotifier: refreshNotifier);
     case 'recipes':
-      return const RecipesScreen();
+      return RecipesScreen(refreshNotifier: refreshNotifier);
     case 'planning':
-      return const PlansScreen();
+      return PlansScreen(refreshNotifier: refreshNotifier);
     case 'inspection':
-      return const InspectionScreen();
+      return InspectionScreen(refreshNotifier: refreshNotifier);
     case 'production_planning':
-      return const ProductionScreen();
+      return ProductionScreen(refreshNotifier: refreshNotifier);
     case 'supplier_orders':
-      return const SupplierOrdersScreen();
+      return SupplierOrdersScreen(refreshNotifier: refreshNotifier);
     case 'reports_general':
     case 'regime51_report':
-      return const ReportsScreen();
+      return ReportsScreen(refreshNotifier: refreshNotifier);
     case 'user_management':
-      return const UsersScreen();
+      return UsersScreen(refreshNotifier: refreshNotifier);
     case 'admin_settings':
-      return const ThresholdsScreen();
+      return ThresholdsScreen(refreshNotifier: refreshNotifier);
   }
   return null;
 }
@@ -90,6 +90,8 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _selectedIndex = 0;
 
+  final ValueNotifier<int> refreshNotifier = ValueNotifier<int>(0);
+
   late final List<_NavEntry> _entries;
 
   @override
@@ -125,7 +127,7 @@ class _HomeShellState extends State<HomeShell> {
     for (final m in access.modules) {
       // Admin toifasi modullari faqat admin (to'liq kirish) uchun mantiqli.
       if (m.category == 'admin' && !role.isAdmin) continue;
-      final screen = moduleScreenFor(m.key);
+      final screen = moduleScreenFor(m.key, refreshNotifier);
       if (screen == null) continue;
       entries.add(_NavEntry(
         NavItem(index: idx++, icon: moduleIconFor(m.key), label: m.nameUz),
@@ -149,40 +151,43 @@ class _HomeShellState extends State<HomeShell> {
     // HR boshqaruvchi faqat HR modulini ko'radi (ombor/ishlab chiqarish yashirin)
     if (role.isHrManager) {
       return [
-        const _NavEntry(NavItem(index: 0, icon: Icons.dashboard, label: 'Bosh oyna'), DashboardHome()),
-        const _NavEntry(NavItem(index: 1, icon: Icons.badge, label: 'Xodimlar'), HrScreen()),
-        const _NavEntry(NavItem(index: 2, icon: Icons.notifications_active, label: 'Ogohlantirishlar'), AlertsScreen()),
+        _NavEntry(const NavItem(index: 0, icon: Icons.dashboard, label: 'Bosh oyna'),
+            DashboardHome(refreshNotifier: refreshNotifier)),
+        _NavEntry(const NavItem(index: 1, icon: Icons.badge, label: 'Xodimlar'),
+            HrScreen(refreshNotifier: refreshNotifier)),
+        _NavEntry(const NavItem(index: 2, icon: Icons.notifications_active, label: 'Ogohlantirishlar'),
+            AlertsScreen(refreshNotifier: refreshNotifier)),
       ];
     }
 
     final entries = <_NavEntry>[
-      _NavEntry(const NavItem(index: 0, icon: Icons.dashboard, label: 'Bosh oyna'), const DashboardHome()),
-      _NavEntry(const NavItem(index: 1, icon: Icons.warehouse, label: 'Omborlar'), const WarehousesScreen()),
-      _NavEntry(const NavItem(index: 2, icon: Icons.category, label: 'Katalog'), const CatalogScreen()),
+      _NavEntry(const NavItem(index: 0, icon: Icons.dashboard, label: 'Bosh oyna'), DashboardHome(refreshNotifier: refreshNotifier)),
+      _NavEntry(const NavItem(index: 1, icon: Icons.warehouse, label: 'Omborlar'), WarehousesScreen(refreshNotifier: refreshNotifier)),
+      _NavEntry(const NavItem(index: 2, icon: Icons.category, label: 'Katalog'), CatalogScreen(refreshNotifier: refreshNotifier)),
     ];
 
     if (!role.isDirector) {
-      entries.add(_NavEntry(const NavItem(index: 3, icon: Icons.assignment, label: 'Rejalar'), const PlansScreen()));
-      entries.add(_NavEntry(const NavItem(index: 4, icon: Icons.deck, label: 'Aralashtirish'), const MixingScreen()));
-      entries.add(_NavEntry(const NavItem(index: 5, icon: Icons.inventory_2, label: 'Qadoqlash'), const PackagingScreen()));
-      entries.add(_NavEntry(const NavItem(index: 6, icon: Icons.menu_book, label: 'Retseptlar'), const RecipesScreen()));
-      entries.add(_NavEntry(const NavItem(index: 7, icon: Icons.fact_check, label: 'Tekshiruv'), const InspectionScreen()));
+      entries.add(_NavEntry(const NavItem(index: 3, icon: Icons.assignment, label: 'Rejalar'), PlansScreen(refreshNotifier: refreshNotifier)));
+      entries.add(_NavEntry(const NavItem(index: 4, icon: Icons.deck, label: 'Aralashtirish'), MixingScreen(refreshNotifier: refreshNotifier)));
+      entries.add(_NavEntry(const NavItem(index: 5, icon: Icons.inventory_2, label: 'Qadoqlash'), PackagingScreen(refreshNotifier: refreshNotifier)));
+      entries.add(_NavEntry(const NavItem(index: 6, icon: Icons.menu_book, label: 'Retseptlar'), RecipesScreen(refreshNotifier: refreshNotifier)));
+      entries.add(_NavEntry(const NavItem(index: 7, icon: Icons.fact_check, label: 'Tekshiruv'), InspectionScreen(refreshNotifier: refreshNotifier)));
     }
     if (role.canControlWarehouses) {
-      entries.add(_NavEntry(const NavItem(index: 8, icon: Icons.local_shipping, label: "Ta'minotchi buyurtmalari"), const SupplierOrdersScreen()));
+      entries.add(_NavEntry(const NavItem(index: 8, icon: Icons.local_shipping, label: "Ta'minotchi buyurtmalari"), SupplierOrdersScreen(refreshNotifier: refreshNotifier)));
     }
 
-    entries.add(_NavEntry(const NavItem(index: 9, icon: Icons.bar_chart, label: 'Hisobotlar'), const ReportsScreen()));
-    entries.add(_NavEntry(const NavItem(index: 10, icon: Icons.notifications_active, label: 'Ogohlantirishlar'), const AlertsScreen()));
+    entries.add(_NavEntry(const NavItem(index: 9, icon: Icons.bar_chart, label: 'Hisobotlar'), ReportsScreen(refreshNotifier: refreshNotifier)));
+    entries.add(_NavEntry(const NavItem(index: 10, icon: Icons.notifications_active, label: 'Ogohlantirishlar'), AlertsScreen(refreshNotifier: refreshNotifier)));
 
     if (role.canManageThresholds) {
-      entries.add(_NavEntry(const NavItem(index: 11, icon: Icons.tune, label: 'Kritik darajalar'), const ThresholdsScreen()));
+      entries.add(_NavEntry(const NavItem(index: 11, icon: Icons.tune, label: 'Kritik darajalar'), ThresholdsScreen(refreshNotifier: refreshNotifier)));
     }
     if (role.canManageUsers) {
-      entries.add(_NavEntry(const NavItem(index: 12, icon: Icons.people, label: 'Foydalanuvchilar'), const UsersScreen()));
+      entries.add(_NavEntry(const NavItem(index: 12, icon: Icons.people, label: 'Foydalanuvchilar'), UsersScreen(refreshNotifier: refreshNotifier)));
     }
     if (role.canViewHr) {
-      entries.add(_NavEntry(NavItem(index: entries.length, icon: Icons.badge, label: 'Xodimlar'), const HrScreen()));
+      entries.add(_NavEntry(NavItem(index: entries.length, icon: Icons.badge, label: 'Xodimlar'), HrScreen(refreshNotifier: refreshNotifier)));
     }
 
     return entries;
@@ -191,6 +196,7 @@ class _HomeShellState extends State<HomeShell> {
   void _onNavSelected(int displayIndex) {
     if (displayIndex < _entries.length) {
       setState(() => _selectedIndex = displayIndex);
+      refreshNotifier.value++;
     }
   }
 

@@ -5,7 +5,9 @@ import '../services/api_service.dart';
 import '../theme/colors.dart';
 
 class AlertsScreen extends StatefulWidget {
-  const AlertsScreen({super.key});
+  const AlertsScreen({super.key, this.refreshNotifier});
+
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<AlertsScreen> createState() => _AlertsScreenState();
@@ -19,6 +21,37 @@ class _AlertsScreenState extends State<AlertsScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _load();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    super.dispose();
+  }
+
+  Widget _refreshButton() {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 4, right: 8),
+        child: TextButton.icon(
+          onPressed: _load,
+          icon: const Icon(Icons.refresh, size: 18),
+          label: const Text('Yangilash'),
+        ),
+      ),
+    );
   }
 
   Future<void> _load() async {
@@ -44,23 +77,37 @@ class _AlertsScreenState extends State<AlertsScreen> {
     final isDesktop = AppBreakpoints.isDesktop(context);
 
     if (lowStock.isEmpty && lateOrders.isEmpty && overduePlans.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.check_circle_outline, size: 64, color: AppColors.statusOk),
-            SizedBox(height: 12),
-            Text('Hamma narsa tartibda', style: TextStyle(color: AppColors.textSecondary, fontSize: 16)),
-          ],
-        ),
+      return Column(
+        children: [
+          _refreshButton(),
+          const Expanded(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.check_circle_outline, size: 64, color: AppColors.statusOk),
+                  SizedBox(height: 12),
+                  Text('Hamma narsa tartibda', style: TextStyle(color: AppColors.textSecondary, fontSize: 16)),
+                ],
+              ),
+            ),
+          ),
+        ],
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: isDesktop
-          ? _buildDesktopLayout(lowStock, lateOrders, overduePlans)
-          : _buildMobileLayout(lowStock, lateOrders, overduePlans),
+    return Column(
+      children: [
+        _refreshButton(),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _load,
+            child: isDesktop
+                ? _buildDesktopLayout(lowStock, lateOrders, overduePlans)
+                : _buildMobileLayout(lowStock, lateOrders, overduePlans),
+          ),
+        ),
+      ],
     );
   }
 

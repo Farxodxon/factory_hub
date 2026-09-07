@@ -5,7 +5,9 @@ import '../services/api_service.dart';
 import '../theme/colors.dart';
 
 class InspectionScreen extends StatefulWidget {
-  const InspectionScreen({super.key});
+  const InspectionScreen({super.key, this.refreshNotifier});
+
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<InspectionScreen> createState() => _InspectionScreenState();
@@ -36,9 +38,9 @@ class _InspectionScreenState extends State<InspectionScreen>
       ),
       body: TabBarView(
         controller: _tab,
-        children: const [
-          _ReceiveTab(),
-          _DecideTab(),
+        children: [
+          _ReceiveTab(refreshNotifier: widget.refreshNotifier),
+          _DecideTab(refreshNotifier: widget.refreshNotifier),
         ],
       ),
     );
@@ -46,7 +48,9 @@ class _InspectionScreenState extends State<InspectionScreen>
 }
 
 class _ReceiveTab extends StatefulWidget {
-  const _ReceiveTab();
+  const _ReceiveTab({this.refreshNotifier});
+
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<_ReceiveTab> createState() => _ReceiveTabState();
@@ -70,7 +74,19 @@ class _ReceiveTabState extends State<_ReceiveTab> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _init();
+  }
+
+  @override
   void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
     _qty.dispose();
     _note.dispose();
     super.dispose();
@@ -143,6 +159,14 @@ class _ReceiveTabState extends State<_ReceiveTab> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: _init,
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('Yangilash'),
+                  ),
+                ),
                 Text('Kirish nazorati (karantin omboriga qabul)',
                     style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 12),
@@ -209,7 +233,9 @@ class _ReceiveTabState extends State<_ReceiveTab> {
 }
 
 class _DecideTab extends StatefulWidget {
-  const _DecideTab();
+  const _DecideTab({this.refreshNotifier});
+
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<_DecideTab> createState() => _DecideTabState();
@@ -227,6 +253,23 @@ class _DecideTabState extends State<_DecideTab> {
   void initState() {
     super.initState();
     _init();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _init();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    super.dispose();
   }
 
   List<dynamic> _filterToAccess(List<dynamic> all) {
@@ -331,6 +374,19 @@ class _DecideTabState extends State<_DecideTab> {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton.icon(
+                      onPressed: _loadInspections,
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: const Text('Yangilash'),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                 child: DropdownButtonFormField<int>(
                   initialValue: _whId,
                   items: _quarantineWh.map<DropdownMenuItem<int>>((w) =>
@@ -406,7 +462,9 @@ class _DecideTabState extends State<_DecideTab> {
                     child: FilledButton.icon(
                       onPressed: busy ? null : () => _decide(insp, 'approved'),
                       icon: const Icon(Icons.check, size: 18),
-                      label: const Text('Tasdiqlash → Xom-ashyo'),
+                      label: Text(insp['itemType'] == 'semi_finished'
+                          ? 'Tasdiqlash → Yarim tayyor'
+                          : 'Tasdiqlash → Xom-ashyo'),
                       style: FilledButton.styleFrom(backgroundColor: AppColors.statusOk),
                     ),
                   ),

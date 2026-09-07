@@ -7,7 +7,9 @@ import '../services/api_service.dart';
 import '../theme/colors.dart';
 
 class WarehousesScreen extends StatefulWidget {
-  const WarehousesScreen({super.key});
+  const WarehousesScreen({super.key, this.refreshNotifier});
+
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<WarehousesScreen> createState() => _WarehousesScreenState();
@@ -62,6 +64,23 @@ class _WarehousesScreenState extends State<WarehousesScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _load();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -175,13 +194,30 @@ class _WarehousesScreenState extends State<WarehousesScreen> {
           : null,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: ListView.builder(
-                padding: const EdgeInsets.all(12),
-                itemCount: _warehouses.length,
-                itemBuilder: (_, i) => _buildWarehouseCard(_warehouses[i]),
-              ),
+          : Column(
+              children: [
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: TextButton.icon(
+                      onPressed: _load,
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: const Text('Yangilash'),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _load,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: _warehouses.length,
+                      itemBuilder: (_, i) => _buildWarehouseCard(_warehouses[i]),
+                    ),
+                  ),
+                ),
+              ],
             ),
     );
   }
@@ -223,6 +259,11 @@ class _WarehousesScreenState extends State<WarehousesScreen> {
                                   if (w.isNotEmpty) _deleteWarehouse(w.first['id'], w.first['name'] ?? '');
                                 },
                               ),
+                            IconButton(
+                              icon: const Icon(Icons.refresh),
+                              tooltip: 'Yangilash',
+                              onPressed: _load,
+                            ),
                           ],
                         ),
                       ),

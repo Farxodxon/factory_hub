@@ -6,7 +6,9 @@ import '../services/api_service.dart';
 import '../theme/colors.dart';
 
 class SupplierOrdersScreen extends StatefulWidget {
-  const SupplierOrdersScreen({super.key});
+  const SupplierOrdersScreen({super.key, this.refreshNotifier});
+
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<SupplierOrdersScreen> createState() => _SupplierOrdersScreenState();
@@ -20,6 +22,23 @@ class _SupplierOrdersScreenState extends State<SupplierOrdersScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _load();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -50,16 +69,30 @@ class _SupplierOrdersScreenState extends State<SupplierOrdersScreen> {
         icon: const Icon(Icons.add),
         label: const Text('Buyurtma'),
       ),
-      body: _loading
+body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: ListView.builder(
-                padding: const EdgeInsets.all(12),
-                itemCount: _orders.length,
-                itemBuilder: (_, i) {
-                  final o = _orders[i];
-                  final isLate = o['isLate'] == true;
+          : Column(
+              children: [
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: TextButton.icon(
+                      onPressed: _load,
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: const Text('Yangilash'),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _load,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: _orders.length,
+                      itemBuilder: (_, i) {
+                        final o = _orders[i];
+                        final isLate = o['isLate'] == true;
 
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
@@ -104,9 +137,12 @@ class _SupplierOrdersScreenState extends State<SupplierOrdersScreen> {
                       ),
                     ),
                   );
-                },
+},
+                  ),
+                ),
               ),
-            ),
+            ],
+          ),
     );
   }
 

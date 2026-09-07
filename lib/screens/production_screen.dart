@@ -5,7 +5,9 @@ import '../services/api_service.dart';
 import '../theme/colors.dart';
 
 class ProductionScreen extends StatefulWidget {
-  const ProductionScreen({super.key});
+  const ProductionScreen({super.key, this.refreshNotifier});
+
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<ProductionScreen> createState() => _ProductionScreenState();
@@ -19,6 +21,23 @@ class _ProductionScreenState extends State<ProductionScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _load();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -51,6 +70,17 @@ class _ProductionScreenState extends State<ProductionScreen> {
           : null,
       body: Column(
         children: [
+          Align(
+            alignment: Alignment.centerRight,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 4, right: 8),
+              child: TextButton.icon(
+                onPressed: _load,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Yangilash'),
+              ),
+            ),
+          ),
           if (FactoryHubApi.role.canPlan)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),

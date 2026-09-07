@@ -7,7 +7,9 @@ import '../theme/colors.dart';
 import '../theme/typography.dart';
 
 class DashboardHome extends StatefulWidget {
-  const DashboardHome({super.key});
+  const DashboardHome({super.key, this.refreshNotifier});
+
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<DashboardHome> createState() => _DashboardHomeState();
@@ -22,6 +24,23 @@ class _DashboardHomeState extends State<DashboardHome> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _load();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -62,21 +81,28 @@ class _DashboardHomeState extends State<DashboardHome> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: _load,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Yangilash'),
+            ),
+          ),
           AdaptiveGrid(
             childAspectRatio: AppBreakpoints.isDesktop(context) ? 2.0 : 1.3,
             children: [
-              _StatCard(icon: Icons.people, label: 'Faol xodimlar', value: stats['activeUsers']),
-              _StatCard(icon: Icons.warehouse, label: 'Omborlar', value: stats['activeWarehouses']),
+              _StatCard(icon: Icons.people, label: 'Jami xodimlar', value: stats['totalEmployees']),
               _StatCard(icon: Icons.assignment, label: 'Ochiq rejalar', value: stats['openPlans']),
-              _StatCard(icon: Icons.factory, label: 'Jarayondagi partiyalar', value: stats['batchesInProgress']),
               _StatCard(icon: Icons.local_shipping, label: "Ta'minot buyurtmalari", value: stats['pendingSupplierOrders']),
               _StatCard(icon: Icons.inventory_2, label: 'Mahsulotlar', value: stats['totalProducts']),
               _StatCard(icon: Icons.science, label: 'Xom ashyolar', value: stats['totalRawMaterials']),
               _StatCard(icon: Icons.handshake, label: 'Hamkorlar', value: stats['activePartners']),
+              _StatCard(icon: Icons.store, label: 'Dillerlar', value: stats['dealerWarehouses']),
             ],
           ),
           const SizedBox(height: 16),
-          if ((stats['batchesInProgress'] ?? 0) > 0 || (_data?['lowStockCount'] ?? 0) > 0)
+          if ((_data?['lowStockCount'] ?? 0) > 0)
             Card(
               color: AppColors.statusWarning.withValues(alpha: 0.1),
               child: ListTile(

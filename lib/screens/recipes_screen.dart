@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import '../models/user.dart';
 import '../services/api_service.dart';
 import '../theme/colors.dart';
+import 'catalog_screen.dart';
 
 class RecipesScreen extends StatefulWidget {
-  const RecipesScreen({super.key});
+  const RecipesScreen({super.key, this.refreshNotifier});
+
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<RecipesScreen> createState() => _RecipesScreenState();
@@ -22,6 +25,23 @@ class _RecipesScreenState extends State<RecipesScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _load();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -53,6 +73,31 @@ class _RecipesScreenState extends State<RecipesScreen> {
     if (saved == true && mounted) _load();
   }
 
+  Future<void> _openCreateMenu() async {
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Yangi yaratish'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 'recipe'),
+            child: const Text('Retsept yaratish'),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 'item'),
+            child: const Text('Mahsulot yaratish'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || choice == null) return;
+    if (choice == 'recipe') {
+      await _openForm();
+    } else if (choice == 'item') {
+      await showCreateItemSheet(context, onCreated: _load);
+    }
+  }
+
   Future<void> _toggleActive(Map<String, dynamic> bom) async {
     final id = bom['id'] as int;
     final result = await FactoryHubApi.updateBom(id, {'is_active': false});
@@ -73,9 +118,9 @@ class _RecipesScreenState extends State<RecipesScreen> {
       floatingActionButton: canEdit
           ? FloatingActionButton.extended(
               heroTag: 'fab_recipes',
-              onPressed: () => _openForm(),
+              onPressed: _openCreateMenu,
               icon: const Icon(Icons.add),
-              label: const Text('Yangi retsept'),
+              label: const Text('Yangi yaratish'),
             )
           : null,
       body: _loading
@@ -96,6 +141,14 @@ class _RecipesScreenState extends State<RecipesScreen> {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
                     children: [
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: _load,
+                          icon: const Icon(Icons.refresh, size: 18),
+                          label: const Text('Yangilash'),
+                        ),
+                      ),
                       Text('Retseptlar', style: Theme.of(context).textTheme.titleLarge),
                       const SizedBox(height: 4),
                       const Text(

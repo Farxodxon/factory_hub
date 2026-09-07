@@ -5,7 +5,9 @@ import '../services/api_service.dart';
 import '../theme/colors.dart';
 
 class ThresholdsScreen extends StatefulWidget {
-  const ThresholdsScreen({super.key});
+  const ThresholdsScreen({super.key, this.refreshNotifier});
+
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<ThresholdsScreen> createState() => _ThresholdsScreenState();
@@ -20,6 +22,23 @@ class _ThresholdsScreenState extends State<ThresholdsScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _load();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -98,6 +117,17 @@ class _ThresholdsScreenState extends State<ThresholdsScreen> {
 
     return Column(
       children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 4, right: 8),
+            child: TextButton.icon(
+              onPressed: _load,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Yangilash'),
+            ),
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
           child: TextField(

@@ -6,7 +6,9 @@ import '../services/api_service.dart';
 import '../theme/colors.dart';
 
 class PlansScreen extends StatefulWidget {
-  const PlansScreen({super.key});
+  const PlansScreen({super.key, this.refreshNotifier});
+
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<PlansScreen> createState() => _PlansScreenState();
@@ -20,6 +22,23 @@ class _PlansScreenState extends State<PlansScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _load();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -67,12 +86,26 @@ class _PlansScreenState extends State<PlansScreen> {
           : null,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: ListView.builder(
-                padding: const EdgeInsets.all(12),
-                itemCount: _plans.length,
-                itemBuilder: (_, i) {
+          : Column(
+              children: [
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: TextButton.icon(
+                      onPressed: _load,
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: const Text('Yangilash'),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _load,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: _plans.length,
+                      itemBuilder: (_, i) {
                   final p = _plans[i];
                   final progress = p['targetQty'] > 0
                       ? ((p['producedQty'] ?? 0) / p['targetQty']).clamp(0.0, 1.0)
@@ -138,8 +171,11 @@ class _PlansScreenState extends State<PlansScreen> {
                     ),
                   );
                 },
+                  ),
+                ),
               ),
-            ),
+            ],
+          ),
     );
   }
 }

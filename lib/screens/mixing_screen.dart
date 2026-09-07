@@ -5,7 +5,9 @@ import '../services/api_service.dart';
 import '../theme/colors.dart';
 
 class MixingScreen extends StatefulWidget {
-  const MixingScreen({super.key});
+  const MixingScreen({super.key, this.refreshNotifier});
+
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<MixingScreen> createState() => _MixingScreenState();
@@ -32,7 +34,19 @@ class _MixingScreenState extends State<MixingScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _load();
+  }
+
+  @override
   void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
     _qty.dispose();
     super.dispose();
   }
@@ -139,6 +153,14 @@ class _MixingScreenState extends State<MixingScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: _load,
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: const Text('Yangilash'),
+                    ),
+                  ),
                   Text('Aralashtirish (xom-ashyo -> yarim tayyor)',
                       style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 4),

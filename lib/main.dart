@@ -10,6 +10,8 @@ void main() {
   runApp(const FactoryHubApp());
 }
 
+final RouteObserver<ModalRoute<void>> routeObserver = RouteObserver<ModalRoute<void>>();
+
 class FactoryHubApp extends StatelessWidget {
   const FactoryHubApp({super.key});
 
@@ -20,6 +22,7 @@ class FactoryHubApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       home: const SplashScreen(),
+      navigatorObservers: [routeObserver],
     );
   }
 }

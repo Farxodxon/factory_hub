@@ -5,7 +5,9 @@ import '../services/api_service.dart';
 import '../theme/colors.dart';
 
 class PackagingScreen extends StatefulWidget {
-  const PackagingScreen({super.key});
+  const PackagingScreen({super.key, this.refreshNotifier});
+
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<PackagingScreen> createState() => _PackagingScreenState();
@@ -34,7 +36,19 @@ class _PackagingScreenState extends State<PackagingScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _load();
+  }
+
+  @override
   void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
     _qty.dispose();
     super.dispose();
   }
@@ -153,6 +167,14 @@ class _PackagingScreenState extends State<PackagingScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: _load,
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: const Text('Yangilash'),
+                    ),
+                  ),
                   Text('Qadoqlash (yarim tayyor + material -> tayyor)',
                       style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 4),
@@ -224,8 +246,8 @@ class _PackagingScreenState extends State<PackagingScreen> {
                     onPressed: _previewing ? null : _previewAction,
                     icon: _previewing
                         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.visibility),
-                    label: const Text('Hisoblash'),
+                        : const Icon(Icons.inventory_2),
+                    label: const Text('Qadoqlash'),
                     style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
                   ),
                   if (_error != null) ...[

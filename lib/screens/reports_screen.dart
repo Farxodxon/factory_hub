@@ -7,7 +7,9 @@ import '../services/api_service.dart';
 import '../theme/colors.dart';
 
 class ReportsScreen extends StatelessWidget {
-  const ReportsScreen({super.key});
+  const ReportsScreen({super.key, this.refreshNotifier});
+
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   Widget build(BuildContext context) {
@@ -29,13 +31,13 @@ class ReportsScreen extends StatelessWidget {
               ],
             ),
           ),
-          const Expanded(
+          Expanded(
             child: TabBarView(
               children: [
-                _StockReport(),
-                _ProductionReport(),
-                _TransactionReport(),
-                _Regime51Report(),
+                _StockReport(refreshNotifier: refreshNotifier),
+                _ProductionReport(refreshNotifier: refreshNotifier),
+                _TransactionReport(refreshNotifier: refreshNotifier),
+                _Regime51Report(refreshNotifier: refreshNotifier),
               ],
             ),
           ),
@@ -48,7 +50,9 @@ class ReportsScreen extends StatelessWidget {
 // ─── ZAXIRA ───────────────────────────────────────────────
 
 class _StockReport extends StatefulWidget {
-  const _StockReport();
+  const _StockReport({this.refreshNotifier});
+
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<_StockReport> createState() => _StockReportState();
@@ -64,6 +68,23 @@ class _StockReportState extends State<_StockReport> {
     _load();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _load();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    super.dispose();
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     final result = await FactoryHubApi.getStock();
@@ -76,27 +97,52 @@ class _StockReportState extends State<_StockReport> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_stock.isEmpty) return const Center(child: Text('Zaxira topilmadi'));
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(12),
-        itemCount: _stock.length,
-        itemBuilder: (_, i) {
-          final s = _stock[i];
-          return Card(
-            margin: const EdgeInsets.only(bottom: 4),
-            child: ListTile(
-              dense: true,
-              leading: Text(s['warehouseName'] ?? ''),
-              title: Text(s['name'] ?? ''),
-              trailing: Text('${s['balance']} ${s['unit'] ?? ''}',
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          );
-        },
+    final refreshBtn = Align(
+      alignment: Alignment.centerRight,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 4, right: 8),
+        child: TextButton.icon(
+          onPressed: _load,
+          icon: const Icon(Icons.refresh, size: 18),
+          label: const Text('Yangilash'),
+        ),
       ),
+    );
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_stock.isEmpty) {
+      return Column(
+        children: [
+          refreshBtn,
+          const Expanded(child: Center(child: Text('Zaxira topilmadi'))),
+        ],
+      );
+    }
+    return Column(
+      children: [
+        refreshBtn,
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _load,
+            child: ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: _stock.length,
+              itemBuilder: (_, i) {
+                final s = _stock[i];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 4),
+                  child: ListTile(
+                    dense: true,
+                    leading: Text(s['warehouseName'] ?? ''),
+                    title: Text(s['name'] ?? ''),
+                    trailing: Text('${s['balance']} ${s['unit'] ?? ''}',
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -104,7 +150,9 @@ class _StockReportState extends State<_StockReport> {
 // ─── ISHLAB CHIQARISH ─────────────────────────────────────
 
 class _ProductionReport extends StatefulWidget {
-  const _ProductionReport();
+  const _ProductionReport({this.refreshNotifier});
+
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<_ProductionReport> createState() => _ProductionReportState();
@@ -120,6 +168,23 @@ class _ProductionReportState extends State<_ProductionReport> {
     _load();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _load();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    super.dispose();
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     final result = await FactoryHubApi.getBatches();
@@ -132,25 +197,50 @@ class _ProductionReportState extends State<_ProductionReport> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_batches.isEmpty) return const Center(child: Text('Ishlab chiqarish topilmadi'));
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(12),
-        itemCount: _batches.length,
-        itemBuilder: (_, i) {
-          final b = _batches[i];
-          return Card(
-            margin: const EdgeInsets.only(bottom: 6),
-            child: ListTile(
-              title: Text(b['productName'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis),
-              subtitle: Text('Reja ${b['plannedQty']} / bajarildi ${b['producedQty'] ?? '-'} dona'),
-              trailing: Text(b['status'] ?? ''),
-            ),
-          );
-        },
+    final refreshBtn = Align(
+      alignment: Alignment.centerRight,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 4, right: 8),
+        child: TextButton.icon(
+          onPressed: _load,
+          icon: const Icon(Icons.refresh, size: 18),
+          label: const Text('Yangilash'),
+        ),
       ),
+    );
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_batches.isEmpty) {
+      return Column(
+        children: [
+          refreshBtn,
+          const Expanded(child: Center(child: Text('Ishlab chiqarish topilmadi'))),
+        ],
+      );
+    }
+    return Column(
+      children: [
+        refreshBtn,
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _load,
+            child: ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: _batches.length,
+              itemBuilder: (_, i) {
+                final b = _batches[i];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  child: ListTile(
+                    title: Text(b['productName'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis),
+                    subtitle: Text('Reja ${b['plannedQty']} / bajarildi ${b['producedQty'] ?? '-'} dona'),
+                    trailing: Text(b['status'] ?? ''),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -158,7 +248,9 @@ class _ProductionReportState extends State<_ProductionReport> {
 // ─── KIRIM/CHIQIM HISOBOT ────────────────────────────────
 
 class _TransactionReport extends StatefulWidget {
-  const _TransactionReport();
+  const _TransactionReport({this.refreshNotifier});
+
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<_TransactionReport> createState() => _TransactionReportState();
@@ -176,6 +268,23 @@ class _TransactionReportState extends State<_TransactionReport> {
   void initState() {
     super.initState();
     _loadWarehouses();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _loadWarehouses();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    super.dispose();
   }
 
   Future<void> _loadWarehouses() async {
@@ -245,6 +354,14 @@ class _TransactionReportState extends State<_TransactionReport> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: _loadWarehouses,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Yangilash'),
+            ),
+          ),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -364,7 +481,9 @@ class _TransactionReportState extends State<_TransactionReport> {
 // hisobotidan butunlay alohida bo'lim.
 
 class _Regime51Report extends StatefulWidget {
-  const _Regime51Report();
+  const _Regime51Report({this.refreshNotifier});
+
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<_Regime51Report> createState() => _Regime51ReportState();
@@ -380,6 +499,23 @@ class _Regime51ReportState extends State<_Regime51Report> {
   void initState() {
     super.initState();
     _loadWarehouses();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _load();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    super.dispose();
   }
 
   Future<void> _loadWarehouses() async {
@@ -404,6 +540,17 @@ class _Regime51ReportState extends State<_Regime51Report> {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 4, right: 8),
+            child: TextButton.icon(
+              onPressed: _load,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Yangilash'),
+            ),
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.all(12),
           child: DropdownButtonFormField<int?>(

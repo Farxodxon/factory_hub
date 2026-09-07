@@ -73,8 +73,30 @@ Color _statusColor(String status) {
   return AppColors.statusCritical;
 }
 
+class _HrRefreshButton extends StatelessWidget {
+  final VoidCallback onPressed;
+  const _HrRefreshButton({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 4, right: 8),
+        child: TextButton.icon(
+          onPressed: onPressed,
+          icon: const Icon(Icons.refresh, size: 18),
+          label: const Text('Yangilash'),
+        ),
+      ),
+    );
+  }
+}
+
 class HrScreen extends StatelessWidget {
-  const HrScreen({super.key});
+  const HrScreen({super.key, this.refreshNotifier});
+
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   Widget build(BuildContext context) {
@@ -103,12 +125,12 @@ class HrScreen extends StatelessWidget {
           Expanded(
             child: TabBarView(
               children: [
-                _EmployeesTab(readOnly: isReadOnly),
-                _AttendanceTab(readOnly: isReadOnly),
-                _PieceRatesTab(readOnly: isReadOnly),
-                _WorkRecordsTab(readOnly: isReadOnly),
-                _FinancialTab(readOnly: isReadOnly),
-                const _MonthlyReportTab(),
+                _EmployeesTab(readOnly: isReadOnly, refreshNotifier: refreshNotifier),
+                _AttendanceTab(readOnly: isReadOnly, refreshNotifier: refreshNotifier),
+                _PieceRatesTab(readOnly: isReadOnly, refreshNotifier: refreshNotifier),
+                _WorkRecordsTab(readOnly: isReadOnly, refreshNotifier: refreshNotifier),
+                _FinancialTab(readOnly: isReadOnly, refreshNotifier: refreshNotifier),
+                _MonthlyReportTab(refreshNotifier: refreshNotifier),
               ],
             ),
           ),
@@ -121,8 +143,9 @@ class HrScreen extends StatelessWidget {
 // ─── XODIMLAR ────────────────────────────────────────────────
 
 class _EmployeesTab extends StatefulWidget {
-  const _EmployeesTab({required this.readOnly});
+  const _EmployeesTab({required this.readOnly, this.refreshNotifier});
   final bool readOnly;
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<_EmployeesTab> createState() => _EmployeesTabState();
@@ -138,6 +161,23 @@ class _EmployeesTabState extends State<_EmployeesTab> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _load();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -190,6 +230,7 @@ class _EmployeesTabState extends State<_EmployeesTab> {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        _HrRefreshButton(onPressed: _load),
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
           child: Column(
@@ -537,8 +578,9 @@ class _EmployeeFormSheetState extends State<_EmployeeFormSheet> {
 // ─── DAVOMAT ─────────────────────────────────────────────────
 
 class _AttendanceTab extends StatefulWidget {
-  const _AttendanceTab({required this.readOnly});
+  const _AttendanceTab({required this.readOnly, this.refreshNotifier});
   final bool readOnly;
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<_AttendanceTab> createState() => _AttendanceTabState();
@@ -553,6 +595,23 @@ class _AttendanceTabState extends State<_AttendanceTab> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _load();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    super.dispose();
   }
 
   String get _dateStr => DateFormat('yyyy-MM-dd').format(_date);
@@ -602,6 +661,7 @@ class _AttendanceTabState extends State<_AttendanceTab> {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        _HrRefreshButton(onPressed: _load),
         Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
@@ -1036,8 +1096,9 @@ class _AttendanceFormSheetState extends State<_AttendanceFormSheet> {
 // ─── MOLIYAVIY ───────────────────────────────────────────────
 
 class _FinancialTab extends StatefulWidget {
-  const _FinancialTab({required this.readOnly});
+  const _FinancialTab({required this.readOnly, this.refreshNotifier});
   final bool readOnly;
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<_FinancialTab> createState() => _FinancialTabState();
@@ -1051,6 +1112,23 @@ class _FinancialTabState extends State<_FinancialTab> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _load();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -1316,8 +1394,9 @@ class _AdjustmentFormSheetState extends State<_AdjustmentFormSheet> {
 // ─── STAVKALAR (piece_rates) ─────────────────────────────────
 
 class _PieceRatesTab extends StatefulWidget {
-  const _PieceRatesTab({required this.readOnly});
+  const _PieceRatesTab({required this.readOnly, this.refreshNotifier});
   final bool readOnly;
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<_PieceRatesTab> createState() => _PieceRatesTabState();
@@ -1332,6 +1411,23 @@ class _PieceRatesTabState extends State<_PieceRatesTab> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _load();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -1433,6 +1529,7 @@ class _PieceRatesTabState extends State<_PieceRatesTab> {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        _HrRefreshButton(onPressed: _load),
         Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
@@ -1512,8 +1609,9 @@ class _PieceRatesTabState extends State<_PieceRatesTab> {
 // ─── ISHLAR (work_records) ───────────────────────────────────
 
 class _WorkRecordsTab extends StatefulWidget {
-  const _WorkRecordsTab({required this.readOnly});
+  const _WorkRecordsTab({required this.readOnly, this.refreshNotifier});
   final bool readOnly;
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<_WorkRecordsTab> createState() => _WorkRecordsTabState();
@@ -1529,6 +1627,23 @@ class _WorkRecordsTabState extends State<_WorkRecordsTab> {
     _load();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _load();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    super.dispose();
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     final result = await FactoryHubApi.getWorkRecords();
@@ -1541,44 +1656,52 @@ class _WorkRecordsTabState extends State<_WorkRecordsTab> {
 
   @override
   Widget build(BuildContext context) {
-    return _loading
-        ? const Center(child: CircularProgressIndicator())
-        : RefreshIndicator(
-            onRefresh: _load,
-            child: _records.isEmpty
-                ? ListView(children: const [
-                    SizedBox(height: 80),
-                    Center(child: Text('Ish yozuvlari topilmadi')),
-                  ])
-                : ListView.separated(
-                    itemCount: _records.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (_, i) {
-                      final r = _records[i];
-                      final name = r['employeeName'] ?? '—';
-                      final label = r['employeeName'] ?? name;
-                      return ListTile(
-                        leading: const Icon(Icons.work_outline),
-                        title: Text(label),
-                        subtitle: Text('${r['workType'] ?? ''} · '
-                            '${r['workDate'] ?? ''} · '
-                            '${_fmtNum((r['quantity'] ?? 0).toDouble())} ${r['unit'] ?? ''}'),
-                        trailing: Text(
-                          '${_fmtNum((r['computedAmount'] ?? 0).toDouble())} so\'m',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+    return Column(
+      children: [
+        _HrRefreshButton(onPressed: _load),
+        Expanded(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: _records.isEmpty
+                      ? ListView(children: const [
+                          SizedBox(height: 80),
+                          Center(child: Text('Ish yozuvlari topilmadi')),
+                        ])
+                      : ListView.separated(
+                          itemCount: _records.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (_, i) {
+                            final r = _records[i];
+                            final name = r['employeeName'] ?? '—';
+                            final label = r['employeeName'] ?? name;
+                            return ListTile(
+                              leading: const Icon(Icons.work_outline),
+                              title: Text(label),
+                              subtitle: Text('${r['workType'] ?? ''} · '
+                                  '${r['workDate'] ?? ''} · '
+                                  '${_fmtNum((r['quantity'] ?? 0).toDouble())} ${r['unit'] ?? ''}'),
+                              trailing: Text(
+                                '${_fmtNum((r['computedAmount'] ?? 0).toDouble())} so\'m',
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              isThreeLine: false,
+                            );
+                          },
                         ),
-                        isThreeLine: false,
-                      );
-                    },
-                  ),
-          );
+                ),
+        ),
+      ],
+    );
   }
 }
 
 // ─── OYLIK HISOBOT ───────────────────────────────────────────
 
 class _MonthlyReportTab extends StatefulWidget {
-  const _MonthlyReportTab();
+  const _MonthlyReportTab({this.refreshNotifier});
+  final ValueNotifier<int>? refreshNotifier;
 
   @override
   State<_MonthlyReportTab> createState() => _MonthlyReportTabState();
@@ -1593,6 +1716,23 @@ class _MonthlyReportTabState extends State<_MonthlyReportTab> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _load();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    super.dispose();
   }
 
   String get _monthStr => DateFormat('yyyy-MM').format(_month);
