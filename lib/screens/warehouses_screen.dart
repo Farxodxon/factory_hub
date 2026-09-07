@@ -1554,6 +1554,8 @@ class _TransferSheetState extends State<_TransferSheet> {
   List<dynamic> _warehouses = [];
   List<dynamic> _stock = [];
   int? _toWarehouseId;
+  int? _fixedTo;
+  String? _fixedName;
   final _searchCtrl = TextEditingController();
   final List<Map<String, dynamic>> _selectedItems = [];
   final _noteCtrl = TextEditingController();
@@ -1588,10 +1590,24 @@ class _TransferSheetState extends State<_TransferSheet> {
     // cheklanmasdan to'ldiriladi.
     final routesDetail = (warehouse?['transferToWarehouses'] as List?) ?? [];
     final allowedTo = (warehouse?['transferTo'] as List?)?.cast<int>() ?? [];
+    final fixedTo = warehouse?['fixedTransferTo'];
+    final fixedName = warehouse?['fixedTransferToWarehouse']?.toString();
     setState(() {
-      _warehouses = routesDetail.isNotEmpty
-          ? routesDetail.cast<Map<String, dynamic>>().toList()
-          : allWh.where((w) => allowedTo.contains(w['id'])).toList();
+      // Qat'iy tayinlangan ombor bo'lsa — manzilni foydalanuvchi tanlamaydi.
+      if (fixedTo != null) {
+        _fixedTo = (fixedTo as num?)?.toInt();
+        _fixedName = fixedName;
+        _toWarehouseId = _fixedTo;
+        _warehouses = [
+          {'id': _fixedTo, 'name': _fixedName ?? 'Ombor #$_fixedTo'},
+        ];
+      } else {
+        _fixedTo = null;
+        _fixedName = null;
+        _warehouses = routesDetail.isNotEmpty
+            ? routesDetail.cast<Map<String, dynamic>>().toList()
+            : allWh.where((w) => allowedTo.contains(w['id'])).toList();
+      }
       _stock = detailResult['stock'] ?? [];
       _loading = false;
     });
@@ -1709,18 +1725,40 @@ class _TransferSheetState extends State<_TransferSheet> {
             const Text('OMBORLARARO TRANSFER', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
             const SizedBox(height: 16),
             if (_loading) const Center(child: CircularProgressIndicator()) else ...[
-              DropdownButtonFormField<int>(
-                initialValue: _toWarehouseId,
-                items: _warehouses.map<DropdownMenuItem<int>>((w) =>
-                  DropdownMenuItem(value: w['id'], child: Text(w['name'] ?? ''))
-                ).toList(),
-                onChanged: (v) => setState(() => _toWarehouseId = v),
-                decoration: InputDecoration(
-                  labelText: 'Manzil ombor',
-                  hintText: _warehouses.isEmpty ? 'Yo\'nalish sozlanmagan' : null,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              if (_fixedTo != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.statusOk.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.statusOk),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.bolt, size: 18, color: AppColors.statusOk),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Avtomatik manzil: ${_fixedName ?? 'Ombor #$_fixedTo'}',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                DropdownButtonFormField<int>(
+                  initialValue: _toWarehouseId,
+                  items: _warehouses.map<DropdownMenuItem<int>>((w) =>
+                    DropdownMenuItem(value: w['id'], child: Text(w['name'] ?? ''))
+                  ).toList(),
+                  onChanged: (v) => setState(() => _toWarehouseId = v),
+                  decoration: InputDecoration(
+                    labelText: 'Manzil ombor',
+                    hintText: _warehouses.isEmpty ? 'Yo\'nalish sozlanmagan' : null,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
                 ),
-              ),
               if (_warehouses.isEmpty)
                 const Padding(
                   padding: EdgeInsets.only(top: 6),
@@ -2069,6 +2107,7 @@ class _EditWarehouseSheetState extends State<_EditWarehouseSheet> {
   late bool _canIncome;
   late bool _canExpense;
   late bool _canTransfer;
+  late int? _fixedTransferTo;
   late List<int> _transferTo;
   List<dynamic> _allWarehouses = [];
   bool _loadingDest = true;
@@ -2082,6 +2121,7 @@ class _EditWarehouseSheetState extends State<_EditWarehouseSheet> {
     _canIncome = widget.warehouse['canIncome'] == true;
     _canExpense = widget.warehouse['canExpense'] == true;
     _canTransfer = widget.warehouse['canTransfer'] == true;
+    _fixedTransferTo = widget.warehouse['fixedTransferTo'] as int?;
     _transferTo = (widget.warehouse['transferTo'] as List?)?.cast<int>() ?? [];
     _loadDestinations();
   }
@@ -2104,6 +2144,7 @@ class _EditWarehouseSheetState extends State<_EditWarehouseSheet> {
       canExpense: _canExpense,
       canTransfer: _canTransfer,
       transferTo: _transferTo,
+      fixedTransferTo: _transferTo.contains(_fixedTransferTo) ? _fixedTransferTo : null,
     );
     if (!mounted) return;
     setState(() => _submitting = false);
@@ -2166,7 +2207,10 @@ class _EditWarehouseSheetState extends State<_EditWarehouseSheet> {
               onChanged: (v) {
                 setState(() {
                   _canTransfer = v;
-                  if (!v) _transferTo.clear();
+                  if (!v) {
+                    _transferTo.clear();
+                    _fixedTransferTo = null;
+                  }
                 });
               },
             ),
@@ -2191,7 +2235,10 @@ class _EditWarehouseSheetState extends State<_EditWarehouseSheet> {
                     final label = w.isNotEmpty ? w.first['name'] : 'Ombor #$id';
                     return Chip(
                       label: Text('$label'),
-                      onDeleted: () => setState(() => _transferTo.remove(id)),
+                      onDeleted: () => setState(() {
+                        _transferTo.remove(id);
+                        if (_fixedTransferTo == id) _fixedTransferTo = null;
+                      }),
                     );
                   }).toList(),
                 ),
@@ -2213,6 +2260,39 @@ class _EditWarehouseSheetState extends State<_EditWarehouseSheet> {
                       },
                 decoration: InputDecoration(
                   hintText: available.isEmpty ? 'Qo\'shish uchun ombor yo\'q' : 'Ombor qo\'shish',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text('Qat\'iy transfer ombori',
+                  style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 4),
+              const Text(
+                'Tayinlansa — foydalanuvchi manzilni tanlamaydi, transfer avtomatik shu omborga yo\'naladi.',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<int?>(
+                key: ValueKey('fixed-${_transferTo.join(',')}'),
+                initialValue: _transferTo.contains(_fixedTransferTo)
+                    ? _fixedTransferTo
+                    : null,
+                items: [
+                  const DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text('Tanlashsiz — foydalanuvchi tanlaydi')),
+                  ..._transferTo.map((id) {
+                    final w = _allWarehouses.where((x) => x['id'] == id).toList();
+                    final label = w.isNotEmpty ? w.first['name'] : 'Ombor #$id';
+                    return DropdownMenuItem<int?>(
+                        value: id, child: Text('$label'));
+                  }),
+                ],
+                onChanged: _transferTo.isEmpty
+                    ? null
+                    : (v) => setState(() => _fixedTransferTo = v),
+                decoration: InputDecoration(
+                  labelText: 'Qat\'iy (avtomatik) ombor',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),

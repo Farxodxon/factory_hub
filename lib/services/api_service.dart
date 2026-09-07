@@ -128,6 +128,7 @@ class FactoryHubApi {
     required bool canIncome,
     required bool canExpense,
     required List<int> transferTo,
+    int? fixedTransferTo,
   }) async =>
       _put('/warehouses/$id', {
         'canAnalyze': canAnalyze,
@@ -135,6 +136,7 @@ class FactoryHubApi {
         'canIncome': canIncome,
         'canExpense': canExpense,
         'transferTo': transferTo,
+        'fixedTransferTo': fixedTransferTo,
       });
 
   static Future<Map<String, dynamic>> deleteWarehouse(int id) async =>
