@@ -153,6 +153,52 @@ class FactoryHubApi {
   static Future<Map<String, dynamic>> getStock({int? warehouseId}) async =>
       _get('/stock${warehouseId == null ? '' : '?warehouse_id=$warehouseId'}');
 
+  // ─── Dillerlar ─────────────────────────────────────────────
+  static Future<Map<String, dynamic>> getDealers({String? marketType}) async {
+    final q = marketType == null || marketType.isEmpty ? '' : '?market_type=$marketType';
+    return _get('/dealers$q');
+  }
+
+  static Future<Map<String, dynamic>> getDealerDetail(int id) async => _get('/dealers/$id');
+
+  static Future<Map<String, dynamic>> createDealer({
+    required String name,
+    required String marketType,
+    String? phone,
+    String? address,
+    String? contactPerson,
+    bool isActive = true,
+  }) async =>
+      _post('/dealers', {
+        'name': name,
+        'marketType': marketType,
+        'phone': phone,
+        'address': address,
+        'contactPerson': contactPerson,
+        'isActive': isActive,
+      });
+
+  static Future<Map<String, dynamic>> updateDealer({
+    required int id,
+    required String name,
+    required String marketType,
+    String? phone,
+    String? address,
+    String? contactPerson,
+    required bool isActive,
+  }) async =>
+      _put('/dealers/$id', {
+        'name': name,
+        'marketType': marketType,
+        'phone': phone,
+        'address': address,
+        'contactPerson': contactPerson,
+        'isActive': isActive,
+      });
+
+  static Future<Map<String, dynamic>> deleteDealer(int id) async =>
+      _delete('/dealers/$id');
+
   // ─── 51-rejim qoldig'i hisoboti ────────────────────────────
   static Future<Map<String, dynamic>> getRegime51Balance({int? warehouseId, int? itemId}) {
     final q = <String>[];

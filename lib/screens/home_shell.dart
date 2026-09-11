@@ -7,6 +7,7 @@ import '../services/api_service.dart';
 import 'alerts_screen.dart';
 import 'catalog_screen.dart';
 import 'dashboard_home.dart';
+import 'dealers_screen.dart';
 import 'hr_screen.dart';
 import 'inspection_screen.dart';
 import 'login_screen.dart';
@@ -175,6 +176,9 @@ class _HomeShellState extends State<HomeShell> {
     }
     if (role.canControlWarehouses) {
       entries.add(_NavEntry(const NavItem(index: 8, icon: Icons.local_shipping, label: "Ta'minotchi buyurtmalari"), SupplierOrdersScreen(refreshNotifier: refreshNotifier)));
+    }
+    if (role.canControlWarehouses || role.isOpsManager || role.isDirector) {
+      entries.add(_NavEntry(NavItem(index: entries.length, icon: Icons.storefront, label: 'Dillerlar'), DealersScreen(refreshNotifier: refreshNotifier)));
     }
 
     entries.add(_NavEntry(const NavItem(index: 9, icon: Icons.bar_chart, label: 'Hisobotlar'), ReportsScreen(refreshNotifier: refreshNotifier)));

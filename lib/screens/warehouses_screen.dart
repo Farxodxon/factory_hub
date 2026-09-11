@@ -1552,6 +1552,10 @@ class _TransferSheet extends StatefulWidget {
 
 class _TransferSheetState extends State<_TransferSheet> {
   List<dynamic> _warehouses = [];
+  List<dynamic> _dealerDests = [];
+  List<dynamic> _normalDests = [];
+  List<dynamic> _dealers = [];
+  String? _dealerSegment;
   List<dynamic> _stock = [];
   int? _toWarehouseId;
   int? _fixedTo;
@@ -1592,6 +1596,13 @@ class _TransferSheetState extends State<_TransferSheet> {
     final allowedTo = (warehouse?['transferTo'] as List?)?.cast<int>() ?? [];
     final fixedTo = warehouse?['fixedTransferTo'];
     final fixedName = warehouse?['fixedTransferToWarehouse']?.toString();
+    final dealersResult = await FactoryHubApi.getDealers();
+    final dealers = dealersResult['dealers'] ?? [];
+    final dealerWhIds = <int>{
+      for (final d in dealers)
+        if (d['warehouseId'] is num || d['warehouseId'] != null)
+          int.tryParse('${d['warehouseId']}') ?? -1,
+    }..remove(-1);
     setState(() {
       // Qat'iy tayinlangan ombor bo'lsa — manzilni foydalanuvchi tanlamaydi.
       if (fixedTo != null) {
@@ -1608,9 +1619,116 @@ class _TransferSheetState extends State<_TransferSheet> {
             ? routesDetail.cast<Map<String, dynamic>>().toList()
             : allWh.where((w) => allowedTo.contains(w['id'])).toList();
       }
+      _dealers = dealers;
+      _dealerDests = _warehouses.where((w) {
+        final id = w['id'];
+        return id is num && dealerWhIds.contains(id.toInt());
+      }).toList();
+      _normalDests = _warehouses.where((w) {
+        final id = w['id'];
+        return !(id is num && dealerWhIds.contains(id.toInt()));
+      }).toList();
+      // Diller manzillar mavjud bo'lsa — avval bozor segmenti ko'rsatiladi.
+      if (_fixedTo == null && _dealerDests.isNotEmpty) {
+        _dealerSegment ??= 'domestic';
+      }
       _stock = detailResult['stock'] ?? [];
       _loading = false;
     });
+  }
+
+  // Segment bo'yicha diller manzillari (diller nomi bilan).
+  List<Map<String, dynamic>> get _segmentDealerDests {
+    final seg = _dealerSegment;
+    if (seg == null) return const [];
+    return _dealerDests.where((w) {
+      final id = w['id'];
+      final dlr = _dealers.cast<Map<String, dynamic>>().where((d) =>
+          d['warehouseId']?.toString() == id?.toString()).toList();
+      return dlr.isNotEmpty && dlr.first['marketType']?.toString() == seg;
+    }).cast<Map<String, dynamic>>().toList();
+  }
+
+  String _dealerNameFor(dynamic w) {
+    final id = w['id']?.toString();
+    for (final d in _dealers) {
+      if (d['warehouseId']?.toString() == id) {
+        return d['name']?.toString() ?? w['name']?.toString() ?? '';
+      }
+    }
+    return w['name']?.toString() ?? '';
+  }
+
+  // Manzil tanlash: avval "Ichki bozor"/"Eksport" segmenti + dillerlar,
+  // davomida boshqa (diller bo'lmagan) omborlar o'zgarmagan holda.
+  Widget _buildDestinationPicker() {
+    final hasDealers = _dealerDests.isNotEmpty;
+    final segmentDests = _segmentDealerDests;
+    final normalInList = _normalDests.any((w) =>
+        w['id']?.toString() == _toWarehouseId?.toString());
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (hasDealers) ...[
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'domestic', label: Text('Ichki bozor')),
+              ButtonSegment(value: 'export', label: Text('Eksport')),
+            ],
+            selected: {_dealerSegment ?? 'domestic'},
+            onSelectionChanged: (set) => setState(() => _dealerSegment = set.first),
+          ),
+          const SizedBox(height: 8),
+          if (segmentDests.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Bu bozorda mavjud diller yo\'q',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: segmentDests.map<Widget>((w) {
+                final id = (w['id'] as num?)?.toInt();
+                final name = _dealerNameFor(w);
+                final selected = _toWarehouseId == id;
+                return ChoiceChip(
+                  label: Text(name),
+                  selected: selected,
+                  onSelected: (_) => setState(() => _toWarehouseId = id),
+                );
+              }).toList(),
+            ),
+          if (_normalDests.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Boshqa omborlar',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ],
+        if (_normalDests.isNotEmpty)
+          DropdownButtonFormField<int>(
+            initialValue: normalInList ? _toWarehouseId : null,
+            items: _normalDests.map<DropdownMenuItem<int>>((w) =>
+              DropdownMenuItem(value: (w['id'] as num).toInt(), child: Text(w['name'] ?? ''))
+            ).toList(),
+            onChanged: (v) => setState(() => _toWarehouseId = v),
+            decoration: InputDecoration(
+              labelText: 'Manzil ombor',
+              hintText: _warehouses.isEmpty ? 'Yo\'nalish sozlanmagan' : null,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+      ],
+    );
   }
 
   List<dynamic> get _filteredStock {
@@ -1747,18 +1865,7 @@ class _TransferSheetState extends State<_TransferSheet> {
                   ),
                 )
               else
-                DropdownButtonFormField<int>(
-                  initialValue: _toWarehouseId,
-                  items: _warehouses.map<DropdownMenuItem<int>>((w) =>
-                    DropdownMenuItem(value: w['id'], child: Text(w['name'] ?? ''))
-                  ).toList(),
-                  onChanged: (v) => setState(() => _toWarehouseId = v),
-                  decoration: InputDecoration(
-                    labelText: 'Manzil ombor',
-                    hintText: _warehouses.isEmpty ? 'Yo\'nalish sozlanmagan' : null,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
+                _buildDestinationPicker(),
               if (_warehouses.isEmpty)
                 const Padding(
                   padding: EdgeInsets.only(top: 6),

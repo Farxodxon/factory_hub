@@ -63,6 +63,18 @@ String _adjStatusLabel(String s) {
   return s;
 }
 
+String _workTypeLabel(String? s) {
+  switch (s) {
+    case 'mixing':
+      return 'Aralashtirish';
+    case 'packaging':
+      return 'Qadoqlash';
+    case 'other':
+      return 'Boshqa';
+  }
+  return s ?? '';
+}
+
 Color _statusColor(String status) {
   if (status == 'approved' || status == 'active' || status == 'present') {
     return AppColors.statusOk;
@@ -369,7 +381,8 @@ bool _hasOt(dynamic r) {
   return n != null && n > 0;
 }
 
-String _fmtNum(dynamic v) {  if (v == null) return '-';
+String _fmtNum(dynamic v) {
+  if (v == null) return '-';
   final n = num.tryParse(v.toString());
   if (n == null) return v.toString();
   final f = n % 1 == 0 ? n.toInt().toString() : n.toString();
@@ -591,6 +604,15 @@ class _AttendanceTabState extends State<_AttendanceTab> {
   List<dynamic> _records = [];
   bool _loading = true;
 
+  Map<String, int> get _statusCounts {
+    final counts = <String, int>{};
+    for (final r in _records) {
+      final s = (r['status'] ?? 'present').toString();
+      counts[s] = (counts[s] ?? 0) + 1;
+    }
+    return counts;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -697,6 +719,21 @@ class _AttendanceTabState extends State<_AttendanceTab> {
             ],
           ),
         ),
+        if (!_loading && _records.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                _statChip('Jami', _records.length, AppColors.textSecondary),
+                _statChip('Keldi', _statusCounts['present'] ?? 0, AppColors.statusOk),
+                _statChip('Kelmadi', _statusCounts['absent'] ?? 0, AppColors.statusCritical),
+                if ((_statusCounts['late'] ?? 0) > 0)
+                  _statChip('Kech qoldi', _statusCounts['late'] ?? 0, AppColors.statusWarning),
+              ],
+            ),
+          ),
         Expanded(
           child: _loading
               ? const Center(child: CircularProgressIndicator())
@@ -752,6 +789,18 @@ class _AttendanceTabState extends State<_AttendanceTab> {
                     ),
         ),
       ],
+    );
+  }
+
+  Widget _statChip(String label, int count, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text('$label: $count',
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
     );
   }
 }
@@ -812,7 +861,7 @@ class _BulkAttendanceSheetState extends State<_BulkAttendanceSheet> {
     if (errors.isNotEmpty) {
       setState(() => _error = '${errors.length} ta yozuv allaqachon bor (tahrirlash orqali yangilang)');
     } else {
-Navigator.pop(context, <String, dynamic>{'ok': true});
+      Navigator.pop(context, <String, dynamic>{'ok': true});
     }
   }
 
@@ -834,7 +883,32 @@ Navigator.pop(context, <String, dynamic>{'ok': true});
             style: Theme.of(context).textTheme.titleLarge,
             textAlign: TextAlign.center,
           ),
+          const SizedBox(height: 4),
+          const Text(
+            'Standart holat: hammasi "Keldi". Faqat kelmaganlarni bosib belgilang.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          ),
           const SizedBox(height: 12),
+          if (!_loading && _employees.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Text('Jami: ${_employees.length}   Kelmadi: $_absentCount',
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => setState(() {
+                      for (final e in _employees) {
+                        _statuses[e['id']] = 'present';
+                      }
+                    }),
+                    child: const Text('Barchasi keldi'),
+                  ),
+                ],
+              ),
+            ),
           Flexible(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
@@ -854,7 +928,7 @@ Navigator.pop(context, <String, dynamic>{'ok': true});
                                 children: [
                                   Expanded(child: Text(e['fullName'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis)),
                                   const SizedBox(width: 8),
-                                  _statusSegmented(id),
+                                  _presentToggle(id),
                                 ],
                               ),
                             ),
@@ -874,25 +948,32 @@ Navigator.pop(context, <String, dynamic>{'ok': true});
     );
   }
 
-  Widget _statusSegmented(int id) {
-    final statuses = ['present', 'absent', 'late', 'sick_leave', 'vacation', 'business_trip'];
-    final labels = ['Keldi', 'Kelmadi', 'Kech', 'Kasal', 'Ta\'til', 'Safar'];
-    final current = _statuses[id] ?? 'present';
-    return PopupMenuButton<String>(
-      initialValue: current,
-      onSelected: (v) => setState(() => _statuses[id] = v),
-      itemBuilder: (_) => [
-        for (var i = 0; i < statuses.length; i++)
-          PopupMenuItem(value: statuses[i], child: Text(labels[i])),
-      ],
+  int get _absentCount => _statuses.values.where((s) => s == 'absent').length;
+
+  Widget _presentToggle(int id) {
+    final isAbsent = (_statuses[id] ?? 'present') == 'absent';
+    return InkWell(
+      onTap: () => setState(() => _statuses[id] = isAbsent ? 'present' : 'absent'),
+      borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: AppColors.primaryBg,
+          color: (isAbsent ? AppColors.statusCritical : AppColors.statusOk).withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.primary),
+          border: Border.all(color: isAbsent ? AppColors.statusCritical : AppColors.statusOk),
         ),
-        child: Text(_attStatusLabel(current)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(isAbsent ? Icons.close : Icons.check, size: 16,
+                color: isAbsent ? AppColors.statusCritical : AppColors.statusOk),
+            const SizedBox(width: 4),
+            Text(isAbsent ? 'Kelmadi' : 'Keldi',
+                style: TextStyle(
+                    color: isAbsent ? AppColors.statusCritical : AppColors.statusOk,
+                    fontWeight: FontWeight.w600)),
+          ],
+        ),
       ),
     );
   }
@@ -1457,14 +1538,10 @@ class _PieceRatesTabState extends State<_PieceRatesTab> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            DropdownButtonFormField<String>(
-              initialValue: _workType,
-              items: const [
-                DropdownMenuItem(value: 'mixing', child: Text('Mixing')),
-                DropdownMenuItem(value: 'packaging', child: Text('Packaging')),
-              ],
-              onChanged: (v) {},
+            InputDecorator(
               decoration: const InputDecoration(labelText: 'Ish turi'),
+              child: Text(_workTypeLabel(_workType),
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -1538,8 +1615,8 @@ class _PieceRatesTabState extends State<_PieceRatesTab> {
                 child: DropdownButtonFormField<String>(
                   initialValue: _workType,
                   items: const [
-                    DropdownMenuItem(value: 'mixing', child: Text('Mixing')),
-                    DropdownMenuItem(value: 'packaging', child: Text('Packaging')),
+                    DropdownMenuItem(value: 'mixing', child: Text('Aralashtirish')),
+                    DropdownMenuItem(value: 'packaging', child: Text('Qadoqlash')),
                   ],
                   onChanged: (v) {
                     if (v != null) {
@@ -1578,7 +1655,7 @@ class _PieceRatesTabState extends State<_PieceRatesTab> {
                             final r = _rates[i];
                             final itemName = r['itemName'] ?? '';
                             return ListTile(
-                              title: Text('${r['workType'] ?? ''} stavkasi'
+                              title: Text('${_workTypeLabel(r['workType']?.toString())} stavkasi'
                                   '${itemName.isEmpty ? '' : ' — $itemName'}'),
                               subtitle: Text('${_fmtNum((r['ratePerUnit'] ?? 0).toDouble())} so\'m/${r['unit'] ?? ''}'),
                               trailing: widget.readOnly
@@ -1620,6 +1697,7 @@ class _WorkRecordsTab extends StatefulWidget {
 class _WorkRecordsTabState extends State<_WorkRecordsTab> {
   List<dynamic> _records = [];
   bool _loading = true;
+  String _workType = 'all';
 
   @override
   void initState() {
@@ -1646,7 +1724,9 @@ class _WorkRecordsTabState extends State<_WorkRecordsTab> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final result = await FactoryHubApi.getWorkRecords();
+    final result = await FactoryHubApi.getWorkRecords(
+      workType: _workType == 'all' ? null : _workType,
+    );
     if (!mounted) return;
     setState(() {
       _records = result['records'] ?? [];
@@ -1654,11 +1734,39 @@ class _WorkRecordsTabState extends State<_WorkRecordsTab> {
     });
   }
 
+  double get _totalAmount =>
+      _records.fold(0.0, (sum, r) => sum + ((r['computedAmount'] ?? 0) as num).toDouble());
+
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         _HrRefreshButton(onPressed: _load),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          child: SizedBox(
+            width: 220,
+            child: DropdownButtonFormField<String>(
+              initialValue: _workType,
+              items: const [
+                DropdownMenuItem(value: 'all', child: Text('Hammasi')),
+                DropdownMenuItem(value: 'mixing', child: Text('Aralashtirish')),
+                DropdownMenuItem(value: 'packaging', child: Text('Qadoqlash')),
+              ],
+              onChanged: (v) {
+                if (v != null) {
+                  setState(() => _workType = v);
+                  _load();
+                }
+              },
+              decoration: const InputDecoration(
+                labelText: 'Ish turi',
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ),
+        ),
         Expanded(
           child: _loading
               ? const Center(child: CircularProgressIndicator())
@@ -1674,12 +1782,11 @@ class _WorkRecordsTabState extends State<_WorkRecordsTab> {
                           separatorBuilder: (_, __) => const Divider(height: 1),
                           itemBuilder: (_, i) {
                             final r = _records[i];
-                            final name = r['employeeName'] ?? '—';
-                            final label = r['employeeName'] ?? name;
+                            final label = r['employeeName'] ?? '—';
                             return ListTile(
                               leading: const Icon(Icons.work_outline),
                               title: Text(label),
-                              subtitle: Text('${r['workType'] ?? ''} · '
+                              subtitle: Text('${_workTypeLabel(r['workType']?.toString())} · '
                                   '${r['workDate'] ?? ''} · '
                                   '${_fmtNum((r['quantity'] ?? 0).toDouble())} ${r['unit'] ?? ''}'),
                               trailing: Text(
@@ -1692,6 +1799,16 @@ class _WorkRecordsTabState extends State<_WorkRecordsTab> {
                         ),
                 ),
         ),
+        if (!_loading && _records.isNotEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            color: AppColors.background,
+            child: Text(
+              'Jami: ${_fmtNum(_totalAmount)} so\'m  (${_records.length} ta yozuv)',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
       ],
     );
   }
