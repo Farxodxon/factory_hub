@@ -1195,14 +1195,23 @@ class _AttendanceFormSheetState extends State<_AttendanceFormSheet> {
   String _fmt(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
-  // Asosiy ish vaqti: obed (tushlik) hisobga olinib, 8 soatgacha.
+  // Tushlik (12:00-14:00) ish vaqtiga kirmaydi: 08:00-12:00 (4 soat) + 14:00-18:00 (4 soat).
   double? get _previewHours {
     if (_inTime == null || _outTime == null) return null;
-    var mins = (_outTime!.hour * 60 + _outTime!.minute) -
-        (_inTime!.hour * 60 + _inTime!.minute);
-    if (mins < 0) mins += 1440;
-    final d = mins / 60.0;
-    final capped = d > 8 ? 8.0 : d;
+    var from = _inTime!.hour * 60 + _inTime!.minute;
+    var to = _outTime!.hour * 60 + _outTime!.minute;
+    if (to < from) to += 1440;
+    const lunchStart = 12 * 60;
+    const lunchEnd = 14 * 60;
+    var overlap = 0;
+    if (from < lunchEnd && to > lunchStart) {
+      final lo = from > lunchStart ? from : lunchStart;
+      final hi = to < lunchEnd ? to : lunchEnd;
+      overlap = hi > lo ? hi - lo : 0;
+    }
+    var work = (to - from) - overlap;
+    if (work < 0) work = 0;
+    final capped = work / 60.0 > 8 ? 8.0 : work / 60.0;
     return double.parse(capped.toStringAsFixed(2));
   }
 
@@ -1379,8 +1388,7 @@ class _AttendanceFormSheetState extends State<_AttendanceFormSheet> {
             if (preview != null) ...[
               const SizedBox(height: 8),
               Text(
-                'Asosiy ish vaqti: ${_fmtNum(preview)} soat'
-                '${preview == 8 ? ' (obed bilan cheklangan)' : ''}',
+                'Asosiy ish vaqti: ${_fmtNum(preview)} soat',
                 style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
               ),
             ],
