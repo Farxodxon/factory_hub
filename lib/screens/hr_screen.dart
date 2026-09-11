@@ -238,6 +238,66 @@ class _EmployeesTabState extends State<_EmployeesTab> {
     _load();
   }
 
+  Future<void> _createLogin(dynamic emp) async {
+    final usrCtrl = TextEditingController(text: emp['username'] ?? '');
+    final emailCtrl = TextEditingController();
+    final pwdCtrl = TextEditingController();
+    final creds = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Xodim uchun login yaratish'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('${emp['fullName']} tizimga o\'zi kirib, GPS orqali davomat belgilaydi.',
+                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: usrCtrl,
+                decoration: const InputDecoration(labelText: 'Foydalanuvchi nomi', isDense: true, border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: emailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'Email (login)', isDense: true, border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: pwdCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Parol', isDense: true, border: OutlineInputBorder()),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('Bekor qilish')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, {
+              'username': usrCtrl.text.trim(),
+              'email': emailCtrl.text.trim(),
+              'password': pwdCtrl.text,
+            }),
+            child: const Text('Yaratish'),
+          ),
+        ],
+      ),
+    );
+    if (creds == null || creds['email']!.isEmpty || creds['password']!.isEmpty) return;
+    final result = await FactoryHubApi.createUser({
+      ...creds,
+      'role': 'employee',
+      'employee_id': emp['id'],
+    });
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result['error'] ?? 'Login yaratildi')),
+    );
+    if (result['error'] == null) _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -346,11 +406,14 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                                     onSelected: (v) {
                                       if (v == 'edit') _openEdit(e);
                                       if (v == 'fire' && !isTerminated) _fire(e);
+                                      if (v == 'login' && !isTerminated) _createLogin(e);
                                     },
                                     itemBuilder: (_) => [
                                       const PopupMenuItem(value: 'edit', child: Text('Tahrirlash')),
                                       if (!isTerminated)
                                         const PopupMenuItem(value: 'fire', child: Text('Ishdan bo\'shatish')),
+                                      if (FactoryHubApi.role.canManageUsers && !isTerminated)
+                                        const PopupMenuItem(value: 'login', child: Text('Login yaratish')),
                                     ],
                                   ),
                                 ],
@@ -613,6 +676,9 @@ class _AttendanceTabState extends State<_AttendanceTab> {
     return counts;
   }
 
+  int get _earlyLeaveCount =>
+      _records.where((r) => r['isEarlyLeave'] == true).length;
+
   @override
   void initState() {
     super.initState();
@@ -731,6 +797,8 @@ class _AttendanceTabState extends State<_AttendanceTab> {
                 _statChip('Kelmadi', _statusCounts['absent'] ?? 0, AppColors.statusCritical),
                 if ((_statusCounts['late'] ?? 0) > 0)
                   _statChip('Kech qoldi', _statusCounts['late'] ?? 0, AppColors.statusWarning),
+                if ((_earlyLeaveCount) > 0)
+                  _statChip('Erta ketdi', _earlyLeaveCount, AppColors.statusWarning),
               ],
             ),
           ),
@@ -767,6 +835,19 @@ class _AttendanceTabState extends State<_AttendanceTab> {
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
+                                  if (r['markedBy'] == 'self') ...[
+                                    const Icon(Icons.gps_fixed, size: 16, color: AppColors.primary),
+                                    const SizedBox(width: 6),
+                                  ],
+                                  if (r['isEarlyLeave'] == true) ...[
+                                    const Chip(
+                                      label: Text('Erta ketdi'),
+                                      labelStyle: TextStyle(fontSize: 10, color: AppColors.statusWarning),
+                                      visualDensity: VisualDensity.compact,
+                                      backgroundColor: AppColors.background,
+                                    ),
+                                    const SizedBox(width: 4),
+                                  ],
                                   Chip(
                                     label: Text(_attStatusLabel(r['status'] ?? 'present')),
                                     labelStyle: TextStyle(fontSize: 11, color: _statusColor(r['status'] ?? 'present')),
@@ -818,6 +899,8 @@ class _BulkAttendanceSheetState extends State<_BulkAttendanceSheet> {
   List<dynamic> _employees = [];
   bool _loading = true;
   final Map<int, String> _statuses = {};
+  // "Kech qoldi" belgilangan xodim uchun kirish vaqti.
+  final Map<int, String> _lateTimes = {};
   String? _error;
 
   @override
@@ -844,10 +927,13 @@ class _BulkAttendanceSheetState extends State<_BulkAttendanceSheet> {
         .map((e) {
       final st = _statuses[e['id']]!;
       final present = st == 'present' || st == 'late';
+      final checkIn = st == 'late'
+          ? (_lateTimes[e['id']] ?? _nowHm())
+          : '08:00';
       return <String, dynamic>{
         'employeeId': e['id'],
         'status': st,
-        if (present) 'checkIn': '08:00',
+        if (present) 'checkIn': checkIn,
         if (present) 'checkOut': '18:00',
       };
     }).toList();
@@ -885,7 +971,8 @@ class _BulkAttendanceSheetState extends State<_BulkAttendanceSheet> {
           ),
           const SizedBox(height: 4),
           const Text(
-            'Standart holat: hammasi "Keldi". Faqat kelmaganlarni bosib belgilang.',
+            'Har bir xodim uchun: Keldi / Kech qoldi / Kelmadi. '
+            '"Kech qoldi" da vaqtni bosib o\'zgartirish mumkin.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
           ),
@@ -895,16 +982,17 @@ class _BulkAttendanceSheetState extends State<_BulkAttendanceSheet> {
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(
                 children: [
-                  Text('Jami: ${_employees.length}   Kelmadi: $_absentCount',
+                  Text('Jami: ${_employees.length}   Kech qoldi: $_lateCount   Kelmadi: $_absentCount',
                       style: const TextStyle(fontWeight: FontWeight.w600)),
                   const Spacer(),
                   TextButton(
                     onPressed: () => setState(() {
                       for (final e in _employees) {
                         _statuses[e['id']] = 'present';
+                        _lateTimes.remove(e['id']);
                       }
                     }),
-                    child: const Text('Barchasi keldi'),
+                    child: const Text('Hammasi keldi'),
                   ),
                 ],
               ),
@@ -928,7 +1016,7 @@ class _BulkAttendanceSheetState extends State<_BulkAttendanceSheet> {
                                 children: [
                                   Expanded(child: Text(e['fullName'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis)),
                                   const SizedBox(width: 8),
-                                  _presentToggle(id),
+                                  _statusToggle(id),
                                 ],
                               ),
                             ),
@@ -949,33 +1037,117 @@ class _BulkAttendanceSheetState extends State<_BulkAttendanceSheet> {
   }
 
   int get _absentCount => _statuses.values.where((s) => s == 'absent').length;
+  int get _lateCount => _statuses.values.where((s) => s == 'late').length;
 
-  Widget _presentToggle(int id) {
-    final isAbsent = (_statuses[id] ?? 'present') == 'absent';
-    return InkWell(
-      onTap: () => setState(() => _statuses[id] = isAbsent ? 'present' : 'absent'),
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: (isAbsent ? AppColors.statusCritical : AppColors.statusOk).withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: isAbsent ? AppColors.statusCritical : AppColors.statusOk),
-        ),
-        child: Row(
+  String _nowHm() {
+    final n = DateTime.now();
+    return '${n.hour.toString().padLeft(2, '0')}:${n.minute.toString().padLeft(2, '0')}';
+  }
+
+  Widget _statusToggle(int id) {
+    final st = _statuses[id] ?? 'present';
+    final options = [
+      ('present', 'Keldi', AppColors.statusOk),
+      ('late', 'Kech qoldi', AppColors.statusWarning),
+      ('absent', 'Kelmadi', AppColors.statusCritical),
+    ];
+    return Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        for (final o in options)
+          InkWell(
+            onTap: () => setState(() {
+              _statuses[id] = o.$1;
+              if (o.$1 == 'late') _lateTimes[id] ??= _nowHm();
+              if (o.$1 != 'late') _lateTimes.remove(id);
+            }),
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              decoration: BoxDecoration(
+                color: (st == o.$1 ? o.$3 : AppColors.background).withValues(alpha: st == o.$1 ? 0.14 : 0.4),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: st == o.$1 ? o.$3 : AppColors.textSecondary.withValues(alpha: 0.3)),
+              ),
+              child: Text(o.$2,
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: st == o.$1 ? FontWeight.bold : FontWeight.normal,
+                      color: st == o.$1 ? o.$3 : AppColors.textSecondary)),
+            ),
+          ),
+        if (st == 'late')
+          InkWell(
+            onTap: () => _pickLateTime(id),
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.primary),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.schedule, size: 14, color: AppColors.primary),
+                  const SizedBox(width: 4),
+                  Text(_lateTimes[id] ?? _nowHm(),
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _pickLateTime(int id) async {
+    final now = _nowHm();
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(isAbsent ? Icons.close : Icons.check, size: 16,
-                color: isAbsent ? AppColors.statusCritical : AppColors.statusOk),
-            const SizedBox(width: 4),
-            Text(isAbsent ? 'Kelmadi' : 'Keldi',
-                style: TextStyle(
-                    color: isAbsent ? AppColors.statusCritical : AppColors.statusOk,
-                    fontWeight: FontWeight.w600)),
+            ListTile(
+              leading: const Icon(Icons.access_time),
+              title: const Text('Hozirgi vaqt'),
+              subtitle: Text(_lateTimes[id] ?? now),
+              onTap: () => Navigator.pop(ctx, 'now'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit_calendar),
+              title: const Text('Qo\'lda vaqt'),
+              onTap: () => Navigator.pop(ctx, 'manual'),
+            ),
           ],
         ),
       ),
     );
+    if (!mounted) return;
+    if (choice == 'now') {
+      setState(() => _lateTimes[id] = now);
+      return;
+    }
+    if (choice == 'manual') {
+      final parts = (_lateTimes[id] ?? now).split(':');
+      final picked = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay(
+          hour: int.tryParse(parts[0]) ?? 8,
+          minute: int.tryParse(parts.length > 1 ? parts[1] : '0') ?? 0,
+        ),
+      );
+      if (picked != null) {
+        setState(() => _lateTimes[id] =
+            '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}');
+      }
+    }
   }
 }
 
@@ -1081,6 +1253,69 @@ class _AttendanceFormSheetState extends State<_AttendanceFormSheet> {
     Navigator.pop(context, true);
   }
 
+  Future<void> _showAudit() async {
+    final res = await FactoryHubApi.getAttendanceAudit(widget.record['id']);
+    if (!mounted) return;
+    final entries = (res['audit'] as List<dynamic>?) ?? const [];
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Tahrirlash tarixi'),
+        contentPadding: const EdgeInsets.only(top: 8),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: entries.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('Yozuvlar yo\'q'),
+                )
+              : ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: entries.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final e = entries[i];
+                    final f = _auditFieldLabel(e['fieldName']?.toString() ?? '');
+                    return ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.schedule, size: 16),
+                      title: Text('$f:  ${e['oldValue'] ?? '—'}  →  ${e['newValue'] ?? '—'}',
+                          style: const TextStyle(fontSize: 13)),
+                      subtitle: Text(
+                        '${e['changedByName'] ?? ''}  •  ${e['changedAt']?.toString().substring(0, 16).replaceAll('T', ' ')}',
+                        style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Yopish')),
+        ],
+      ),
+    );
+  }
+
+  String _auditFieldLabel(String f) {
+    switch (f) {
+      case 'check_in':
+        return 'Kelish';
+      case 'check_out':
+        return 'Ketish';
+      case 'hours_worked':
+        return 'Ish vaqti';
+      case 'overtime_hours':
+        return 'Qo\'shimcha ish';
+      case 'status':
+        return 'Holat';
+      case 'is_early_leave':
+        return 'Erta ketish';
+      case 'note':
+        return 'Izoh';
+    }
+    return f;
+  }
+
   Widget _timeField(String label, TimeOfDay? t, VoidCallback onTap) {
     return InkWell(
       onTap: widget.readOnly ? null : onTap,
@@ -1116,7 +1351,13 @@ class _AttendanceFormSheetState extends State<_AttendanceFormSheet> {
               style: Theme.of(context).textTheme.titleLarge,
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 4),
+            TextButton.icon(
+              onPressed: _showAudit,
+              icon: const Icon(Icons.history, size: 18),
+              label: const Text('Tahrirlash tarixi'),
+            ),
+            const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               initialValue: _status,
               decoration: const InputDecoration(labelText: 'Holat', border: OutlineInputBorder()),
@@ -1974,6 +2215,7 @@ class _MonthlyReportTabState extends State<_MonthlyReportTab> {
                                       _stat('Keldi', r['daysPresent']),
                                       _stat('Kelmadi', r['daysAbsent']),
                                       _stat('Kech', r['daysLate']),
+                                      _stat('Erta ketdi', r['daysEarlyLeave']),
                                       _stat('Soat', r['totalHours']),
                                       _stat('Qo\'shimcha',
                                           _hasOt(r) ? r['totalOvertimeHours'] : '-'),

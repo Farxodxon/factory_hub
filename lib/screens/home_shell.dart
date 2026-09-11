@@ -17,6 +17,7 @@ import 'plans_screen.dart';
 import 'production_screen.dart';
 import 'recipes_screen.dart';
 import 'reports_screen.dart';
+import 'self_checkin_screen.dart';
 import 'supplier_orders_screen.dart';
 import 'thresholds_screen.dart';
 import 'users_screen.dart';
@@ -104,6 +105,16 @@ class _HomeShellState extends State<HomeShell> {
   List<_NavEntry> _buildEntries() {
     final role = FactoryHubApi.role;
     final access = FactoryHubApi.userAccess;
+
+    // Xodim roli: faqat kunlik davomat ekrani (GPS bilan o'zi belgilash).
+    if (role.isEmployee) {
+      return [
+        const _NavEntry(
+          NavItem(index: 0, icon: Icons.radio_button_checked, label: 'Kunlik davomat'),
+          SelfCheckinScreen(),
+        ),
+      ];
+    }
 
     // Modul/ombor asosidagi kirish: admin/director bo'lmaganlar
     // faqat biriktirilgan omborlar va modullarni ko'radi.

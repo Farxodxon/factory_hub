@@ -5,6 +5,7 @@ class AppRoles {
   static const warehouseController = 'warehouse_controller';
   static const director = 'director';
   static const hrManager = 'hr_manager';
+  static const employee = 'employee';
 
   static bool isValid(String role) => [
         admin,
@@ -13,6 +14,7 @@ class AppRoles {
         warehouseController,
         director,
         hrManager,
+        employee,
       ].contains(role);
 }
 
@@ -23,6 +25,7 @@ extension RoleX on String {
   bool get isController => this == AppRoles.warehouseController;
   bool get isDirector => this == AppRoles.director;
   bool get isHrManager => this == AppRoles.hrManager;
+  bool get isEmployee => this == AppRoles.employee;
 
   String get label {
     switch (this) {
@@ -38,6 +41,8 @@ extension RoleX on String {
         return 'Direktor';
       case AppRoles.hrManager:
         return 'HR boshqaruvchi';
+      case AppRoles.employee:
+        return 'Xodim';
     }
     return this;
   }
@@ -45,10 +50,11 @@ extension RoleX on String {
   bool get canManageUsers => isAdmin;
   bool get canManageThresholds => isAdmin;
   bool get canPlan => isAdmin || isOpsManager;
-  bool get canTransactStock => !isDirector && !isHrManager;
+  bool get canTransactStock => !isDirector && !isHrManager && !isEmployee;
   bool get canControlWarehouses => isAdmin || isController;
-  bool get isReadOnly => isDirector;
+  bool get isReadOnly => isDirector || isEmployee;
 
   bool get canViewHr => isAdmin || isHrManager || isDirector;
   bool get canManageHr => isAdmin || isHrManager;
+  bool get canSelfCheckin => isEmployee;
 }

@@ -292,6 +292,32 @@ class FactoryHubApi {
   static Future<Map<String, dynamic>> updateAttendance(int id, Map<String, dynamic> data) async =>
       _put('/hr/attendance/$id', data);
 
+  // Xodim o'zi GPS orqali belgilaydi (in/out).
+  static Future<Map<String, dynamic>> selfCheckin({
+    required String type,
+    required double lat,
+    required double lng,
+    int? employeeId,
+  }) =>
+      _post('/hr/attendance/self-checkin', {
+        'type': type,
+        'lat': lat,
+        'lng': lng,
+        if (employeeId != null) 'employee_id': employeeId,
+      });
+
+  // Xodim uchun bugungi holat.
+  static Future<Map<String, dynamic>> getMyAttendance() async =>
+      _get('/hr/attendance/me');
+
+  // Nazoratchi uchun: hali belgilanmagan xodimlar.
+  static Future<Map<String, dynamic>> getUnmarkedEmployees(String date) async =>
+      _get('/hr/attendance/unmarked?date=$date');
+
+  // Tahrirlash tarixi (audit).
+  static Future<Map<String, dynamic>> getAttendanceAudit(int id) async =>
+      _get('/hr/attendance/$id/audit');
+
   // ─── HR: Premiya/Jarima/Avans ──────────────────────────────
   static Future<Map<String, dynamic>> getSalaryAdjustments({    int? employeeId,
     String? type,
