@@ -543,7 +543,16 @@ class WarehouseDetailScreenState extends State<WarehouseDetailScreen>
     final done = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _TransferSheet(fromWarehouseId: widget.id),
+      builder: (_) {
+        final child = _TransferSheet(fromWarehouseId: widget.id);
+        if (!AppBreakpoints.isDesktop(context)) return child;
+        return Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: child,
+          ),
+        );
+      },
     );
     if (done == true && mounted) {
       _load();
@@ -561,11 +570,20 @@ class WarehouseDetailScreenState extends State<WarehouseDetailScreen>
     final done = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _TransactionSheet(
-        warehouseId: widget.id,
-        direction: direction,
-        warehouseType: _detail?['warehouse']?['type'] ?? 'raw',
-      ),
+      builder: (_) {
+        final child = _TransactionSheet(
+          warehouseId: widget.id,
+          direction: direction,
+          warehouseType: _detail?['warehouse']?['type'] ?? 'raw',
+        );
+        if (!AppBreakpoints.isDesktop(context)) return child;
+        return Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: child,
+          ),
+        );
+      },
     );
     if (done == true && mounted) {
       _load();
@@ -1207,44 +1225,144 @@ class _TransactionSheetState extends State<_TransactionSheet> {
   final _note = TextEditingController();
   final _searchCtrl = TextEditingController();
   List<dynamic> _items = [];
-  int? _selectedRawId;
-  String? _selectedRawName;
-  String? _selectedBarcode;
-  String? _selectedProductName;
+  List<dynamic> _rawStock = [];
+  Map<String, dynamic>? _selectedItem;
   late String _selectedType;
   String? _error;
   bool _loadingItems = true;
   bool _regime51 = false;
 
-  bool get _isRawWarehouse => widget.warehouseType == 'raw';
-  bool get _isFinishedWarehouse => widget.warehouseType == 'finished';
-  bool get _showTypeSelector => !_isRawWarehouse && !_isFinishedWarehouse;
+  bool get _isIn => widget.direction == 'in';
+
+  // Qo'lda KIRIM uchun ombor turi -> qabul qilinadigan element turi(turlari).
+  static const List<String> _semiFamily = ['semi_finished', 'semi', 'intermediate'];
+
+  List<String> get _inTypeOptions {
+    switch (widget.warehouseType) {
+      case 'raw':
+      case 'production':
+      case 'quarantine':
+        return const ['raw_material'];
+      case 'finished':
+      case 'purchased_finished':
+      case 'sales':
+      case 'dealer':
+        return const ['product'];
+      case 'packaging':
+        return const ['packaging'];
+      case 'semi_finished':
+      case 'purchased_semi':
+        return const ['semi_group'];
+      case 'spare_parts':
+        return const ['spare_part'];
+      default:
+        return const ['raw_material', 'product'];
+    }
+  }
+
+  // CHIQIM: joriy ombor qoldig'ida ijobiy balansga ega element turlari.
+  List<String> get _outTypeOptions {
+    final set = <String>{};
+    for (final s in _rawStock) {
+      final t = s['itemType']?.toString();
+      if (t != null && t.isNotEmpty) set.add(t);
+    }
+    return set.toList();
+  }
+
+  List<String> get _typeOptions => _isIn ? _inTypeOptions : _outTypeOptions;
+
+  String _labelFor(String type) {
+    switch (type) {
+      case 'raw_material':
+        return 'Xom ashyo';
+      case 'product':
+        return 'Mahsulot';
+      case 'packaging':
+        return 'Qadoqlash materiali';
+      case 'semi_group':
+        return 'Yarim tayyor';
+      case 'spare_part':
+        return 'Zap qism';
+      default:
+        return type == 'item' ? 'Element' : type;
+    }
+  }
+
+  // Katalog manbasi: raw (xom ashyo), product (mahsulot), catalog (fh.items).
+  String _kindFor(String type) {
+    if (type == 'raw_material') return 'raw';
+    if (type == 'product') return 'product';
+    return 'catalog';
+  }
+
+  // Katalog (fh.items) turlari uchun ruxsat etilgan item_type'lar.
+  List<String> _catalogAllowedTypes(String type) {
+    switch (type) {
+      case 'semi_group':
+        return _semiFamily;
+      case 'packaging':
+        return const ['packaging'];
+      case 'spare_part':
+        return const ['spare_part'];
+      default:
+        return const [];
+    }
+  }
+
+  String get _warehouseLabel {
+    switch (widget.warehouseType) {
+      case 'raw':
+        return 'Xom ashyo ombori';
+      case 'production':
+        return 'Ishlab chiqarish ombori';
+      case 'finished':
+        return 'Tayyor mahsulot ombori';
+      case 'sales':
+        return 'Sotuv ombori';
+      case 'dealer':
+        return 'Diller ombori';
+      case 'packaging':
+        return 'Qadoqlash ombori';
+      case 'semi_finished':
+        return 'Yarim tayyor ombori';
+      default:
+        return '';
+    }
+  }
 
   List<dynamic> get _filteredItems {
+    final base = _isIn
+        ? _items
+        : _rawStock
+            .where((s) => s['itemType']?.toString() == _selectedType)
+            .toList();
     final q = _searchCtrl.text.toLowerCase().trim();
-    if (q.isEmpty) return _items;
-    return _items.where((e) {
+    if (q.isEmpty) return base;
+    return base.where((e) {
       final name = (e['name'] ?? '').toString().toLowerCase();
-      final code = (e['code'] ?? '').toString().toLowerCase();
-      final barcode = (e['barcode'] ?? '').toString().toLowerCase();
+      final code = (e['code'] ?? e['refKey'] ?? '').toString().toLowerCase();
+      final barcode = (e['barcode'] ?? e['refBarcode'] ?? '').toString().toLowerCase();
       return name.contains(q) || code.contains(q) || barcode.contains(q);
     }).toList();
   }
 
-  bool get _hasSelection =>
-      (_selectedType == 'raw_material' && _selectedRawId != null) ||
-      (_selectedType == 'product' && _selectedBarcode != null);
+  bool get _hasSelection => _selectedItem != null;
+
+  int? _idOf(Map<String, dynamic> item) {
+    if (item['refId'] != null) return int.tryParse(item['refId'].toString());
+    if (item['id'] != null) return int.tryParse(item['id'].toString());
+    final b = item['barcode']?.toString();
+    if (b != null && b.isNotEmpty) return int.tryParse(b);
+    return null;
+  }
 
   @override
   void initState() {
     super.initState();
-    if (_isRawWarehouse) {
-      _selectedType = 'raw_material';
-    } else if (_isFinishedWarehouse) {
-      _selectedType = 'product';
-    } else {
-      _selectedType = 'raw_material';
-    }
+    _selectedType = widget.direction == 'in' && _inTypeOptions.isNotEmpty
+        ? _inTypeOptions.first
+        : 'raw_material';
     _loadItems();
   }
 
@@ -1257,33 +1375,80 @@ class _TransactionSheetState extends State<_TransactionSheet> {
   }
 
   Future<void> _loadItems() async {
-    final result =
-        _selectedType == 'product' ? await FactoryHubApi.getProducts() : await FactoryHubApi.getRawMaterials();
+    if (widget.direction == 'out') {
+      final result = await FactoryHubApi.getWarehouseDetail(widget.warehouseId);
+      if (!mounted) return;
+      final stock = ((result['stock'] as List?) ?? []).where((s) {
+        return (double.tryParse(s['balance']?.toString() ?? '0') ?? 0) > 0;
+      }).toList();
+      setState(() {
+        _loadingItems = false;
+        _rawStock = stock;
+        _selectedItem = null;
+        if (!_outTypeOptions.contains(_selectedType)) {
+          _selectedType =
+              _outTypeOptions.isNotEmpty ? _outTypeOptions.first : 'raw_material';
+        }
+        _searchCtrl.clear();
+      });
+      return;
+    }
+
+    final kind = _kindFor(_selectedType);
+    final result = kind == 'raw'
+        ? await FactoryHubApi.getRawMaterials()
+        : kind == 'product'
+            ? await FactoryHubApi.getProducts()
+            : await FactoryHubApi.getItems();
     if (!mounted) return;
     setState(() {
       _loadingItems = false;
-      _items = result['error'] != null
+      dynamic list = result['error'] != null
           ? []
-          : (_selectedType == 'product' ? result['products'] : result['rawMaterials']) ?? [];
-      _selectedRawId = null;
-      _selectedRawName = null;
-      _selectedBarcode = null;
-      _selectedProductName = null;
+          : kind == 'raw'
+              ? result['rawMaterials']
+              : kind == 'product'
+                  ? result['products']
+                  : result['items'];
+      if (kind == 'catalog') {
+        list = ((list as List?) ?? []).where((e) {
+          final t = e['itemType']?.toString();
+          return t != null && _catalogAllowedTypes(_selectedType).contains(t);
+        }).toList();
+      }
+      _items = list ?? [];
+      _selectedItem = null;
       _searchCtrl.clear();
     });
   }
 
   void _selectItem(Map<String, dynamic> item) {
+    final itemType = widget.direction == 'in'
+        ? (item['itemType'] as String?) ?? _selectedType
+        : (item['itemType']?.toString() ?? _selectedType);
+    final prod = itemType == 'product';
     setState(() {
-      if (_selectedType == 'raw_material') {
-        _selectedRawId = item['id'] != null ? int.tryParse(item['id'].toString()) : null;
-        _selectedRawName = item['name']?.toString();
-        _searchCtrl.text = '${item['code'] ?? ''} — ${item['name'] ?? ''}';
-      } else {
-        _selectedBarcode = item['barcode']?.toString();
-        _selectedProductName = item['name']?.toString();
-        _searchCtrl.text = '${item['barcode'] ?? ''} — ${item['name'] ?? ''}';
-      }
+      _selectedItem = {
+        'itemType': itemType,
+        'refId': prod ? null : _idOf(item),
+        'refBarcode': prod
+            ? (item['refBarcode']?.toString() ?? item['barcode']?.toString())
+            : null,
+        'name': item['name']?.toString(),
+        'unit': (item['unit']?.toString().isNotEmpty ?? false)
+            ? item['unit']!.toString()
+            : prod
+                ? 'dona'
+                : 'kg',
+        'maxQty': widget.direction == 'in'
+            ? null
+            : (double.tryParse(item['balance']?.toString() ?? '0') ?? 0),
+      };
+      final code =
+          (item['code'] ?? item['refKey'] ?? item['barcode'] ?? '').toString();
+      _searchCtrl.text = [code, item['name']?.toString()]
+          .where((t) => (t ?? '').isNotEmpty)
+          .join(' — ');
     });
   }
 
@@ -1294,26 +1459,42 @@ class _TransactionSheetState extends State<_TransactionSheet> {
       return;
     }
 
-    if (!_hasSelection) {
+    if (_selectedItem == null) {
       setState(() => _error = 'Element tanlang');
       return;
     }
 
+    final itemType = _selectedItem!['itemType'] as String;
+    if (widget.direction == 'out') {
+      final maxQty =
+          double.tryParse(_selectedItem!['maxQty']?.toString() ?? '') ?? 0;
+      if (qty > maxQty + 0.0001) {
+        final mv = maxQty == maxQty.roundToDouble()
+            ? maxQty.toStringAsFixed(0)
+            : maxQty.toString();
+        setState(() =>
+            _error = 'Qoldiq yetarli emas. Mavjud: $mv ${_selectedItem!['unit'] ?? ''}');
+        return;
+      }
+    }
+
     final data = <String, dynamic>{
       'warehouse_id': widget.warehouseId,
-      'item_type': _selectedType,
+      'item_type': itemType,
       'direction': widget.direction,
       'qty': qty,
       'note': _note.text.trim().isEmpty ? null : _note.text.trim(),
+      'name': _selectedItem!['name'],
+      'unit': _selectedItem!['unit'],
     };
     // 51-rejim bayrog'i faqat xom-ashyo qabul (kirim) uchun yuboriladi
-    if (_selectedType == 'raw_material' && widget.direction == 'in') {
+    if (itemType == 'raw_material' && widget.direction == 'in') {
       data['is_regime_51'] = _regime51;
     }
-    if (_selectedType == 'raw_material') {
-      data['ref_id'] = _selectedRawId;
+    if (itemType == 'product') {
+      data['ref_barcode'] = _selectedItem!['refBarcode'];
     } else {
-      data['ref_barcode'] = _selectedBarcode;
+      data['ref_id'] = _selectedItem!['refId'];
     }
 
     final result = await FactoryHubApi.addTransaction(data);
@@ -1327,6 +1508,12 @@ class _TransactionSheetState extends State<_TransactionSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = AppBreakpoints.isDesktop(context);
+    final fs = isDesktop ? 1.15 : 1.0;
+    final titleStyle =
+        (isDesktop ? Theme.of(context).textTheme.headlineSmall : Theme.of(context).textTheme.titleLarge)
+            ?.copyWith(fontWeight: FontWeight.bold);
+    final noStock = widget.direction == 'out' && _rawStock.isEmpty && !_loadingItems;
     return Padding(
       padding: EdgeInsets.only(
         left: 16,
@@ -1341,22 +1528,29 @@ class _TransactionSheetState extends State<_TransactionSheet> {
           children: [
             Text(
               widget.direction == 'in' ? 'KIRIM' : 'CHIQIM',
-              style: Theme.of(context).textTheme.titleLarge,
+              style: titleStyle,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 4),
             Text(
-              _isRawWarehouse ? 'Xom ashyo ombori' : _isFinishedWarehouse ? 'Tayyor mahsulot ombori' : '',
-              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              _warehouseLabel,
+              style: TextStyle(fontSize: 12 * fs, color: AppColors.textSecondary),
               textAlign: TextAlign.center,
             ),
+            if (widget.direction == 'out') ...[
+              const SizedBox(height: 4),
+              Text(
+                'Faqat qoldiqdagi elementlar ko\'rsatiladi',
+                style: TextStyle(fontSize: 11 * fs, color: AppColors.textSecondary),
+                textAlign: TextAlign.center,
+              ),
+            ],
             const SizedBox(height: 12),
-            if (_showTypeSelector) ...[
+            if (_typeOptions.length > 1) ...[
               SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'raw_material', label: Text('Xom ashyo')),
-                  ButtonSegment(value: 'product', label: Text('Mahsulot')),
-                ],
+                segments: _typeOptions
+                    .map((t) => ButtonSegment(value: t, label: Text(_labelFor(t))))
+                    .toList(),
                 selected: {_selectedType},
                 onSelectionChanged: (s) {
                   setState(() {
@@ -1372,22 +1566,21 @@ class _TransactionSheetState extends State<_TransactionSheet> {
               controller: _searchCtrl,
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
-                hintText: _selectedType == 'raw_material'
+                hintText: _kindFor(_selectedType) == 'raw'
                     ? 'Kod yoki nom bo\'yicha qidirish'
-                    : 'Nom yoki barcode bo\'yicha qidirish',
+                    : _kindFor(_selectedType) == 'product'
+                        ? 'Nom yoki barcode bo\'yicha qidirish'
+                        : widget.direction == 'out'
+                            ? 'Qoldiqdan qidirish'
+                            : 'Kod yoki nom bo\'yicha qidirish',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _searchCtrl.text.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear, size: 18),
-                        onPressed: () {
-                          setState(() {
-                            _searchCtrl.clear();
-                            _selectedRawId = null;
-                            _selectedRawName = null;
-                            _selectedBarcode = null;
-                            _selectedProductName = null;
-                          });
-                        },
+                        onPressed: () => setState(() {
+                          _selectedItem = null;
+                          _searchCtrl.clear();
+                        }),
                       )
                     : null,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -1403,8 +1596,8 @@ class _TransactionSheetState extends State<_TransactionSheet> {
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
-                        _selectedType == 'raw_material' ? _selectedRawName! : _selectedProductName!,
-                        style: const TextStyle(fontSize: 12, color: AppColors.statusOk),
+                        _selectedItem!['name']?.toString() ?? '',
+                        style: TextStyle(fontSize: 12 * fs, color: AppColors.statusOk),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -1416,6 +1609,11 @@ class _TransactionSheetState extends State<_TransactionSheet> {
             const SizedBox(height: 8),
             if (_loadingItems)
               const Center(child: CircularProgressIndicator())
+            else if (noStock)
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: Text('Bu omborda qoldiq yo\'q', style: TextStyle(color: AppColors.textSecondary))),
+              )
             else if (_filteredItems.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(16),
@@ -1423,7 +1621,7 @@ class _TransactionSheetState extends State<_TransactionSheet> {
               )
             else
               Container(
-                constraints: const BoxConstraints(maxHeight: 200),
+                constraints: BoxConstraints(maxHeight: isDesktop ? 320 : 200),
                 decoration: BoxDecoration(
                   border: Border.all(color: AppColors.divider),
                   borderRadius: BorderRadius.circular(8),
@@ -1434,9 +1632,18 @@ class _TransactionSheetState extends State<_TransactionSheet> {
                   itemCount: _filteredItems.length,
                   itemBuilder: (_, i) {
                     final item = _filteredItems[i];
-                    final isSelected = _selectedType == 'raw_material'
-                        ? item['id']?.toString() == _selectedRawId?.toString()
-                        : item['barcode']?.toString() == _selectedBarcode;
+                    final itemType =
+                        (item['itemType']?.toString() ?? _selectedType);
+                    final kind = _kindFor(itemType);
+                    final code = (item['code'] ?? item['refKey'] ?? '').toString();
+                    final barcode =
+                        (item['barcode'] ?? item['refBarcode'] ?? '').toString();
+                    final isSelected = _selectedItem != null &&
+                        _selectedItem!['itemType'].toString() == itemType &&
+                        _selectedItem!['refId']?.toString() ==
+                            (item['refId'] ?? item['id'])?.toString() &&
+                        _selectedItem!['refBarcode']?.toString() ==
+                            (item['refBarcode'] ?? item['barcode'])?.toString();
                     return InkWell(
                       onTap: () => _selectItem(item),
                       child: Container(
@@ -1444,7 +1651,7 @@ class _TransactionSheetState extends State<_TransactionSheet> {
                         color: isSelected ? AppColors.primaryBg : null,
                         child: Row(
                           children: [
-                            if (_selectedType == 'raw_material') ...[
+                            if (code.isNotEmpty && kind != 'product') ...[
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
@@ -1452,38 +1659,37 @@ class _TransactionSheetState extends State<_TransactionSheet> {
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
-                                  '${item['code'] ?? ''}',
-                                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: AppColors.primary),
+                                  code,
+                                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12 * fs, color: AppColors.primary),
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  '${item['name'] ?? ''}',
-                                  style: const TextStyle(fontSize: 13),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ] else ...[
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      '${item['name'] ?? ''}',
-                                      style: const TextStyle(fontSize: 13),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    Text(
-                                      '${item['barcode'] ?? ''}',
-                                      style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                                    ),
-                                  ],
-                                ),
-                              ),
                             ],
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${item['name'] ?? ''}',
+                                    style: TextStyle(fontSize: 13 * fs),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  if (kind == 'product')
+                                    Text(
+                                      barcode,
+                                      style: TextStyle(fontSize: 11 * fs, color: AppColors.textSecondary),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              widget.direction == 'out'
+                                  ? '${item['balance']} ${item['unit'] ?? ''}'
+                                  : '${item['unit'] ?? ''}',
+                              style: TextStyle(fontSize: 12 * fs, color: AppColors.textSecondary),
+                            ),
                           ],
                         ),
                       ),
@@ -1496,7 +1702,9 @@ class _TransactionSheetState extends State<_TransactionSheet> {
               controller: _qty,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
-                labelText: 'Miqdor',
+                labelText: widget.direction == 'out' && _hasSelection
+                    ? 'Miqdor (maks: ${_selectedItem!['maxQty']})'
+                    : 'Miqdor',
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
@@ -1509,13 +1717,13 @@ class _TransactionSheetState extends State<_TransactionSheet> {
                 dense: true,
                 value: _regime51,
                 onChanged: (v) => setState(() => _regime51 = v ?? false),
-                title: const Text(
+                title: Text(
                   'Bu partiya 51-bojxona rejimiga tegishli',
-                  style: TextStyle(fontSize: 14),
+                  style: TextStyle(fontSize: 14 * fs),
                 ),
-                subtitle: const Text(
+                subtitle: Text(
                   'Umumiy balansga ta\'sir qilmaydi, alohida hisobot uchun',
-                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  style: TextStyle(fontSize: 12 * fs, color: AppColors.textSecondary),
                 ),
               ),
             ],
@@ -1532,9 +1740,15 @@ class _TransactionSheetState extends State<_TransactionSheet> {
               Text(_error!, style: const TextStyle(color: AppColors.statusCritical)),
             ],
             const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _hasSelection ? _submit : null,
-              child: const Text('Saqlash'),
+            SizedBox(
+              height: isDesktop ? 48 : null,
+              child: ElevatedButton(
+                onPressed: _hasSelection ? _submit : null,
+                style: isDesktop
+                    ? ElevatedButton.styleFrom(textStyle: const TextStyle(fontSize: 16))
+                    : null,
+                child: const Text('Saqlash'),
+              ),
             ),
           ],
         ),
@@ -1830,6 +2044,8 @@ class _TransferSheetState extends State<_TransferSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = AppBreakpoints.isDesktop(context);
+    final fs = isDesktop ? 1.15 : 1.0;
     return Padding(
       padding: EdgeInsets.only(
         left: 16, right: 16, top: 16,
@@ -1840,7 +2056,12 @@ class _TransferSheetState extends State<_TransferSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('OMBORLARARO TRANSFER', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+            Text('OMBORLARARO TRANSFER',
+                style: TextStyle(
+                  fontSize: isDesktop ? 22 : 18,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center),
             const SizedBox(height: 16),
             if (_loading) const Center(child: CircularProgressIndicator()) else ...[
               if (_fixedTo != null)
@@ -1891,7 +2112,7 @@ class _TransferSheetState extends State<_TransferSheet> {
               ),
               if (_filteredStock.isNotEmpty)
                 Container(
-                  constraints: const BoxConstraints(maxHeight: 160),
+                  constraints: BoxConstraints(maxHeight: isDesktop ? 240 : 160),
                   margin: const EdgeInsets.only(top: 4),
                   decoration: BoxDecoration(
                     border: Border.all(color: AppColors.divider),
@@ -1916,11 +2137,11 @@ class _TransferSheetState extends State<_TransferSheet> {
                                     color: s['itemType'] == 'raw_material' ? AppColors.primary : AppColors.gold,
                                     borderRadius: BorderRadius.circular(3),
                                   ),
-                                  child: Text(refKey, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                                  child: Text(refKey, style: TextStyle(color: Colors.white, fontSize: 10 * fs, fontWeight: FontWeight.bold)),
                                 ),
                               if (refKey.isNotEmpty) const SizedBox(width: 8),
-                              Expanded(child: Text(s['name'] ?? '', style: const TextStyle(fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                              Text('${s['balance']} ${s['unit'] ?? ''}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                              Expanded(child: Text(s['name'] ?? '', style: TextStyle(fontSize: 13 * fs), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                              Text('${s['balance']} ${s['unit'] ?? ''}', style: TextStyle(fontSize: 12 * fs, color: AppColors.textSecondary)),
                             ],
                           ),
                         ),
@@ -1930,7 +2151,7 @@ class _TransferSheetState extends State<_TransferSheet> {
                 ),
               if (_selectedItems.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                const Text('Tanlanganlar:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                Text('Tanlanganlar:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13 * fs)),
                 const SizedBox(height: 4),
                 ...List.generate(_selectedItems.length, (i) {
                   final si = _selectedItems[i];
@@ -1940,14 +2161,14 @@ class _TransferSheetState extends State<_TransferSheet> {
                       children: [
                         Expanded(
                           flex: 3,
-                          child: Text(si['name'] ?? '', style: const TextStyle(fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          child: Text(si['name'] ?? '', style: TextStyle(fontSize: 13 * fs), maxLines: 1, overflow: TextOverflow.ellipsis),
                         ),
                         SizedBox(
-                          width: 70,
+                          width: isDesktop ? 90 : 70,
                           child: TextField(
                             controller: si['qtyCtrl'],
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            style: const TextStyle(fontSize: 13),
+                            style: TextStyle(fontSize: 13 * fs),
                             decoration: InputDecoration(
                               isDense: true,
                               hintText: '0',
@@ -1956,7 +2177,7 @@ class _TransferSheetState extends State<_TransferSheet> {
                             ),
                           ),
                         ),
-                        Text(' ${si['unit'] ?? ''}', style: const TextStyle(fontSize: 11)),
+                        Text(' ${si['unit'] ?? ''}', style: TextStyle(fontSize: 11 * fs)),
                         IconButton(
                           icon: const Icon(Icons.close, size: 16, color: AppColors.statusCritical),
                           onPressed: () => _removeItem(i),
@@ -1974,11 +2195,17 @@ class _TransferSheetState extends State<_TransferSheet> {
               Text(_error!, style: const TextStyle(color: AppColors.statusCritical)),
             ],
             const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _submitting ? null : _submit,
-              child: _submitting
-                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Transfer bajarish'),
+            SizedBox(
+              height: isDesktop ? 48 : null,
+              child: ElevatedButton(
+                onPressed: _submitting ? null : _submit,
+                style: isDesktop
+                    ? ElevatedButton.styleFrom(textStyle: const TextStyle(fontSize: 16))
+                    : null,
+                child: _submitting
+                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('Transfer bajarish'),
+              ),
             ),
           ],
         ),
