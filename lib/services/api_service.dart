@@ -378,6 +378,52 @@ class FactoryHubApi {
   static Future<Map<String, dynamic>> deleteWorkRecord(int id) async =>
       _delete('/hr/work-records/$id');
 
+  // ─── HR: Bayramlar (holidays CRUD) ──────────────────────
+  static Future<Map<String, dynamic>> getHolidays({
+    String? month,
+    String? from,
+    String? to,
+  }) {
+    final q = <String>[];
+    if (month != null && month.isNotEmpty) q.add('month=$month');
+    if (from != null && from.isNotEmpty) q.add('from=$from');
+    if (to != null && to.isNotEmpty) q.add('to=$to');
+    return _get('/hr/holidays${q.isEmpty ? '' : '?${q.join('&')}'}');
+  }
+
+  static Future<Map<String, dynamic>> createHoliday(
+    String holidayDate, {
+    String? label,
+  }) =>
+      _post('/hr/holidays', {
+        'holidayDate': holidayDate,
+        if (label != null && label.isNotEmpty) 'label': label,
+      });
+
+  static Future<Map<String, dynamic>> updateHoliday(
+    int id, {
+    String? holidayDate,
+    String? label,
+  }) =>
+      _put('/hr/holidays/$id', {
+        if (holidayDate != null && holidayDate.isNotEmpty) 'holidayDate': holidayDate,
+        if (label != null && label.isNotEmpty) 'label': label,
+      });
+
+  static Future<Map<String, dynamic>> deleteHoliday(int id) async =>
+      _delete('/hr/holidays/$id');
+
+  // ─── HR: Oylik ish haqi (payroll.dart: Nigora oklad / Madina ishbay) ──────
+  static Future<Map<String, dynamic>> getPayrollReport({
+    required int year,
+    required int month,
+    int? employeeId,
+  }) {
+    var url = '/hr/monthly-report?year=$year&month=$month';
+    if (employeeId != null) url += '&employee_id=$employeeId';
+    return _get(url);
+  }
+
   // ─── HR: Oylik hisobot ─────────────────────────────────────
   static Future<Map<String, dynamic>> getMonthlyReport({
     String? month,

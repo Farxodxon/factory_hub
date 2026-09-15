@@ -75,6 +75,18 @@ String _workTypeLabel(String? s) {
   return s ?? '';
 }
 
+String _dayTypeLabel(String? s) {
+  switch (s) {
+    case 'sof_qadoqlash':
+      return 'Sof qadoqlash';
+    case 'sof_soatbay':
+      return 'Sof soatbay';
+    case 'aralash':
+      return 'Aralash';
+  }
+  return s ?? '';
+}
+
 Color _statusColor(String status) {
   if (status == 'approved' || status == 'active' || status == 'present') {
     return AppColors.statusOk;
@@ -114,7 +126,7 @@ class HrScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final isReadOnly = !FactoryHubApi.role.canManageHr;
     return DefaultTabController(
-      length: 6,
+      length: 7,
       child: Column(
         children: [
           const Material(
@@ -129,6 +141,7 @@ class HrScreen extends StatelessWidget {
                 Tab(text: 'Davomat'),
                 Tab(text: 'Stavkalar'),
                 Tab(text: 'Ishlar'),
+                Tab(text: 'Bayramlar'),
                 Tab(text: 'Moliyaviy'),
                 Tab(text: 'Hisobot'),
               ],
@@ -141,6 +154,7 @@ class HrScreen extends StatelessWidget {
                 _AttendanceTab(readOnly: isReadOnly, refreshNotifier: refreshNotifier),
                 _PieceRatesTab(readOnly: isReadOnly, refreshNotifier: refreshNotifier),
                 _WorkRecordsTab(readOnly: isReadOnly, refreshNotifier: refreshNotifier),
+                _HolidaysTab(readOnly: isReadOnly, refreshNotifier: refreshNotifier),
                 _FinancialTab(readOnly: isReadOnly, refreshNotifier: refreshNotifier),
                 _MonthlyReportTab(refreshNotifier: refreshNotifier),
               ],
@@ -1986,6 +2000,25 @@ class _WorkRecordsTabState extends State<_WorkRecordsTab> {
   double get _totalAmount =>
       _records.fold(0.0, (sum, r) => sum + ((r['computedAmount'] ?? 0) as num).toDouble());
 
+  Future<void> _openAddSheet() async {
+    final result = await FactoryHubApi.getEmployees(status: 'active');
+    final employees = result['employees'] ?? [];
+    if (!mounted || employees.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Faol xodimlar ro\'yxati bo\'sh')),
+        );
+      }
+      return;
+    }
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => _WorkRecordAddSheet(employees: employees),
+    );
+    if (saved == true && mounted) _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -1993,27 +2026,38 @@ class _WorkRecordsTabState extends State<_WorkRecordsTab> {
         _HrRefreshButton(onPressed: _load),
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-          child: SizedBox(
-            width: 220,
-            child: DropdownButtonFormField<String>(
-              initialValue: _workType,
-              items: const [
-                DropdownMenuItem(value: 'all', child: Text('Hammasi')),
-                DropdownMenuItem(value: 'mixing', child: Text('Aralashtirish')),
-                DropdownMenuItem(value: 'packaging', child: Text('Qadoqlash')),
-              ],
-              onChanged: (v) {
-                if (v != null) {
-                  setState(() => _workType = v);
-                  _load();
-                }
-              },
-              decoration: const InputDecoration(
-                labelText: 'Ish turi',
-                isDense: true,
-                border: OutlineInputBorder(),
+          child: Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _workType,
+                  items: const [
+                    DropdownMenuItem(value: 'all', child: Text('Hammasi')),
+                    DropdownMenuItem(value: 'mixing', child: Text('Aralashtirish')),
+                    DropdownMenuItem(value: 'packaging', child: Text('Qadoqlash')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) {
+                      setState(() => _workType = v);
+                      _load();
+                    }
+                  },
+                  decoration: const InputDecoration(
+                    labelText: 'Ish turi',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                ),
               ),
-            ),
+              if (!widget.readOnly) ...[
+                const SizedBox(width: 8),
+                IconButton.filled(
+                  onPressed: _openAddSheet,
+                  icon: const Icon(Icons.add),
+                  tooltip: 'Yangi ish yozuvi',
+                ),
+              ],
+            ],
           ),
         ),
         Expanded(
@@ -2032,15 +2076,37 @@ class _WorkRecordsTabState extends State<_WorkRecordsTab> {
                           itemBuilder: (_, i) {
                             final r = _records[i];
                             final label = r['employeeName'] ?? '—';
+                            final dt = r['dayType']?.toString();
+                            final hrs = r['hoursWorked']?.toString();
+                            final st = r['status']?.toString() ?? '';
+                            final qtyNum = num.tryParse((r['quantity'] ?? 0).toString()) ?? 0;
                             return ListTile(
                               leading: const Icon(Icons.work_outline),
                               title: Text(label),
-                              subtitle: Text('${_workTypeLabel(r['workType']?.toString())} · '
-                                  '${r['workDate'] ?? ''} · '
-                                  '${_fmtNum((r['quantity'] ?? 0).toDouble())} ${r['unit'] ?? ''}'),
-                              trailing: Text(
-                                '${_fmtNum((r['computedAmount'] ?? 0).toDouble())} so\'m',
-                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              subtitle: Text([
+                                _workTypeLabel(r['workType']?.toString()),
+                                r['workDate'] ?? '',
+                                '$qtyNum ${r['unit'] ?? ''}',
+                                if (dt != null && dt.isNotEmpty) _dayTypeLabel(dt),
+                                if (hrs != null && hrs.isNotEmpty) '$hrs soat',
+                              ].join(' · ')),
+                              trailing: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    '${_fmtNum((r['computedAmount'] ?? 0).toDouble())} so\'m',
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  if (st.isNotEmpty)
+                                    Text(
+                                      st == 'pending' ? 'kutilmoqda' : st,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: _statusColor(st),
+                                      ),
+                                    ),
+                                ],
                               ),
                               isThreeLine: false,
                             );
@@ -2063,20 +2129,21 @@ class _WorkRecordsTabState extends State<_WorkRecordsTab> {
   }
 }
 
-// ─── OYLIK HISOBOT ───────────────────────────────────────────
+// ─── BAYRAMLAR ───────────────────────────────────────────────
 
-class _MonthlyReportTab extends StatefulWidget {
-  const _MonthlyReportTab({this.refreshNotifier});
+class _HolidaysTab extends StatefulWidget {
+  const _HolidaysTab({required this.readOnly, this.refreshNotifier});
+  final bool readOnly;
   final ValueNotifier<int>? refreshNotifier;
 
   @override
-  State<_MonthlyReportTab> createState() => _MonthlyReportTabState();
+  State<_HolidaysTab> createState() => _HolidaysTabState();
 }
 
-class _MonthlyReportTabState extends State<_MonthlyReportTab> {
-  DateTime _month = DateTime.now();
-  List<dynamic> _rows = [];
+class _HolidaysTabState extends State<_HolidaysTab> {
+  List<dynamic> _holidays = [];
   bool _loading = true;
+  DateTime _month = DateTime.now();
 
   @override
   void initState() {
@@ -2105,11 +2172,482 @@ class _MonthlyReportTabState extends State<_MonthlyReportTab> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final result = await FactoryHubApi.getMonthlyReport(month: _monthStr);
+    final result = await FactoryHubApi.getHolidays(month: _monthStr);
+    if (!mounted) return;
+    setState(() {
+      _holidays = result['holidays'] ?? [];
+      _loading = false;
+    });
+  }
+
+  Future<void> _pickMonth() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _month,
+      firstDate: DateTime(2023),
+      lastDate: DateTime(2099),
+    );
+    if (picked != null) {
+      setState(() => _month = picked);
+      _load();
+    }
+  }
+
+  Future<void> _add() async {
+    if (widget.readOnly) return;
+    final date = TextEditingController(
+        text: DateFormat('yyyy-MM-dd').format(DateTime(_month.year, _month.month, 1)));
+    final label = TextEditingController(text: 'Bayram');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Yangi bayram'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: date,
+              decoration: const InputDecoration(labelText: 'Sana (YYYY-MM-DD)'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: label,
+              decoration: const InputDecoration(labelText: 'Nomi'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Bekor')),
+          FilledButton(
+            onPressed: () {
+              if (DateTime.tryParse(date.text) != null && label.text.trim().isNotEmpty) {
+                Navigator.pop(ctx, true);
+              }
+            },
+            child: const Text('Saqlash'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final result = await FactoryHubApi.createHoliday(date.text, label: label.text.trim());
+    if (!mounted) return;
+    if (result['error'] != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(result['error'].toString())));
+      return;
+    }
+    _load();
+  }
+
+  Future<void> _edit(Map<String, dynamic> h) async {
+    if (widget.readOnly) return;
+    final id = h['id'] as num?;
+    if (id == null) return;
+    final label = TextEditingController(text: h['label']?.toString() ?? 'Bayram');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Bayram nomini tahrirlash'),
+        content: TextField(
+          controller: label,
+          decoration: const InputDecoration(labelText: 'Nomi'),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Bekor')),
+          FilledButton(
+            onPressed: () {
+              if (label.text.trim().isNotEmpty) Navigator.pop(ctx, true);
+            },
+            child: const Text('Saqlash'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final result =
+        await FactoryHubApi.updateHoliday(id.toInt(), label: label.text.trim());
+    if (result['error'] != null && mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(result['error'].toString())));
+    }
+    _load();
+  }
+
+  Future<void> _delete(Map<String, dynamic> h) async {
+    if (widget.readOnly) return;
+    final id = h['id'] as num?;
+    if (id == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('${h['holidayDate']} — ${h['label']?.toString() ?? ''}'),
+        content: const Text('Bayramni o\'chirasizmi?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Bekor')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('O\'chirish'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final result = await FactoryHubApi.deleteHoliday(id.toInt());
+    if (result['error'] != null && mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(result['error'].toString())));
+    }
+    _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: _pickMonth,
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Oy',
+                      isDense: true,
+                      prefixIcon: Icon(Icons.calendar_month),
+                      border: OutlineInputBorder(),
+                    ),
+                    child: Text(DateFormat('MMMM yyyy').format(_month)),
+                  ),
+                ),
+              ),
+              if (!widget.readOnly) ...[
+                const SizedBox(width: 8),
+                FilledButton.tonalIcon(
+                  onPressed: _add,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Qo\'shish'),
+                ),
+              ],
+            ],
+          ),
+        ),
+        Expanded(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: _holidays.isEmpty
+                      ? ListView(children: const [
+                          SizedBox(height: 80),
+                          Center(child: Text('Bu oyda bayramlar yo\'q')),
+                        ])
+                      : ListView.separated(
+                          itemCount: _holidays.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (_, i) {
+                            final h = _holidays[i];
+                            return ListTile(
+                              leading: const Icon(Icons.celebration_outlined,
+                                  color: AppColors.primary),
+                              title: Text(h['holidayDate']?.toString() ?? ''),
+                              subtitle: Text(h['label']?.toString() ?? 'Bayram'),
+                              onTap: widget.readOnly ? null : () => _edit(h),
+                              trailing: widget.readOnly
+                                  ? null
+                                  : IconButton(
+                                      icon: const Icon(Icons.delete_outline),
+                                      onPressed: () => _delete(h),
+                                    ),
+                            );
+                          },
+                        ),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── ISH YOZUVLARI: qo'shish formasi ─────────────────────────
+
+class _WorkRecordAddSheet extends StatefulWidget {
+  const _WorkRecordAddSheet({required this.employees});
+  final List<dynamic> employees;
+
+  @override
+  State<_WorkRecordAddSheet> createState() => _WorkRecordAddSheetState();
+}
+
+class _WorkRecordAddSheetState extends State<_WorkRecordAddSheet> {
+  int? _employeeId;
+  String _workType = 'packaging';
+  String _dayType = 'none';
+  final _quantity = TextEditingController();
+  final _hours = TextEditingController();
+  final _rate = TextEditingController();
+  final _date = TextEditingController(text: DateFormat('yyyy-MM-dd').format(DateTime.now()));
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.employees.isNotEmpty) {
+      final firstId = widget.employees.first['id'];
+      _employeeId = firstId is int ? firstId : (firstId is num ? firstId.toInt() : null);
+    }
+  }
+
+  @override
+  void dispose() {
+    _quantity.dispose();
+    _hours.dispose();
+    _rate.dispose();
+    _date.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate:
+          DateTime.tryParse(_date.text) ?? DateTime.now(),
+      firstDate: DateTime(2023),
+      lastDate: DateTime(2099),
+    );
+    if (picked != null) {
+      _date.text = DateFormat('yyyy-MM-dd').format(picked);
+    }
+  }
+
+  Future<void> _save() async {
+    final validator = _dayType == 'none'
+        ? (double.tryParse(_quantity.text) ?? 0) > 0
+        : _dayType == 'sof_soatbay'
+            ? (double.tryParse(_hours.text) ?? 0) > 0
+            : (double.tryParse(_quantity.text) ?? 0) > 0;
+    if (_employeeId == null) {
+      _snack('Xodimni tanlang'); 
+      return;
+    }
+    if (!validator) {
+      _snack(_dayType == 'none'
+          ? 'Birlik miqdori 0 dan katta bo\'lishi kerak'
+          : _dayType == 'sof_soatbay'
+              ? 'Sof soatbay uchun soat kerak'
+              : 'Sof qadoqlash uchun miqdor kerak');
+      return;
+    }
+    final data = <String, dynamic>{
+      'employeeId': _employeeId,
+      'workDate': _date.text,
+      'workType': _workType,
+      'unit': 'dona',
+      if (_dayType != 'none') 'dayType': _dayType,
+      'quantity': double.tryParse(_quantity.text) ?? 0,
+      if (_dayType != 'none')
+        'hoursWorked': double.tryParse(_hours.text) ?? 0,
+      if (double.tryParse(_rate.text) != null && double.parse(_rate.text) > 0)
+        'rateApplied': double.parse(_rate.text),
+    };
+    final result = await FactoryHubApi.createWorkRecord(data);
+    if (!mounted) return;
+    if (result['error'] != null) {
+      _snack(result['error'].toString());
+      return;
+    }
+    Navigator.pop(context, true);
+  }
+
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16, right: 16, top: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Yangi ish yozuvi',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<int>(
+              initialValue: _employeeId,
+              isExpanded: true,
+              items: widget.employees
+                  .map<DropdownMenuItem<int>>((e) => DropdownMenuItem(
+                        value: (e['id'] as num).toInt(),
+                        child: Text(e['fullName']?.toString() ?? '—',
+                            overflow: TextOverflow.ellipsis),
+                      ))
+                  .toList(),
+              onChanged: (v) => setState(() => _employeeId = v),
+              decoration: const InputDecoration(
+                labelText: 'Xodim',
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                child: InkWell(
+                  onTap: _pickDate,
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Sana',
+                      isDense: true,
+                      prefixIcon: Icon(Icons.calendar_month),
+                      border: OutlineInputBorder(),
+                    ),
+                    child: Text(_date.text),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _workType,
+                  items: const [
+                    DropdownMenuItem(value: 'packaging', child: Text('Qadoqlash')),
+                    DropdownMenuItem(value: 'mixing', child: Text('Aralashtirish')),
+                    DropdownMenuItem(value: 'other', child: Text('Boshqa')),
+                  ],
+                  onChanged: (v) => setState(() => _workType = v!),
+                  decoration: const InputDecoration(
+                    labelText: 'Ish turi',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _dayType,
+              items: const [
+                DropdownMenuItem(value: 'none', child: Text('Oddiy (soat kiritilmaydi)')),
+                DropdownMenuItem(value: 'sof_qadoqlash', child: Text('Sof qadoqlash')),
+                DropdownMenuItem(value: 'sof_soatbay', child: Text('Sof soatbay')),
+                DropdownMenuItem(value: 'aralash', child: Text('Aralash')),
+              ],
+              onChanged: (v) => setState(() => _dayType = v!),
+              decoration: const InputDecoration(
+                labelText: 'Kun turi (day_type)',
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                child: TextField(
+                  controller: _quantity,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Miqdor (dona)',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _hours,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Soat (hours_worked)',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _rate,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Stavka (so\'m)',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _save,
+                child: const Text('Saqlash'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── OYLIK HISOBOT (payroll.dart) ────────────────────────────
+
+class _MonthlyReportTab extends StatefulWidget {
+  const _MonthlyReportTab({this.refreshNotifier});
+  final ValueNotifier<int>? refreshNotifier;
+
+  @override
+  State<_MonthlyReportTab> createState() => _MonthlyReportTabState();
+}
+
+class _MonthlyReportTabState extends State<_MonthlyReportTab> {
+  DateTime _month = DateTime.now();
+  List<dynamic> _rows = [];
+  Map<String, dynamic> _summary = {};
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    widget.refreshNotifier?.addListener(_refreshListener);
+  }
+
+  void _refreshListener() {
+    if (mounted) _load();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshNotifier?.removeListener(_refreshListener);
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final result =
+        await FactoryHubApi.getPayrollReport(year: _month.year, month: _month.month);
     if (!mounted) return;
     setState(() {
       _loading = false;
       _rows = result['rows'] ?? [];
+      _summary = result['summary'] as Map<String, dynamic>? ?? {};
     });
   }
 
@@ -2178,12 +2716,11 @@ class _MonthlyReportTabState extends State<_MonthlyReportTab> {
                         itemBuilder: (_, i) {
                           final r = _rows[i];
                           final payType = r['payType']?.toString() ?? 'salary';
-                          final base = double.tryParse(r['baseSalaryComponent']?.toString() ?? '0') ?? 0;
-                          final piece = double.tryParse(r['pieceRateComponent']?.toString() ?? '0') ?? 0;
-                          final bonus = double.tryParse(r['totalBonus']?.toString() ?? '0') ?? 0;
-                          final penalty = double.tryParse(r['totalPenalty']?.toString() ?? '0') ?? 0;
-                          final advance = double.tryParse(r['totalAdvance']?.toString() ?? '0') ?? 0;
-                          final net = double.tryParse(r['netAmount']?.toString() ?? '');
+                          final total = double.tryParse(r['total']?.toString() ?? '') ?? 0;
+                          final base = double.tryParse(r['baseSalary']?.toString() ?? '0') ?? 0;
+                          final piece = double.tryParse(r['pieceTotal']?.toString() ?? '0') ?? 0;
+                          final avg = r['avgHourlyRate']?.toString() ?? '';
+                          final pending = int.tryParse(r['pendingDays']?.toString() ?? '0') ?? 0;
                           final payLabel = switch (payType) {
                             'piece_rate' => 'Ishbay',
                             'hybrid' => 'Aralash',
@@ -2206,10 +2743,10 @@ class _MonthlyReportTabState extends State<_MonthlyReportTab> {
                                         ),
                                       ),
                                       Text(
-                                        net == null ? 'Hisob yo\'q' : 'Jami: ${_fmtNum(net)}',
+                                        'Jami: ${_fmtNum(total)}',
                                         style: TextStyle(
                                           fontWeight: FontWeight.w700,
-                                          color: net == null ? AppColors.textSecondary : AppColors.primary,
+                                          color: total > 0 ? AppColors.primary : AppColors.textSecondary,
                                         ),
                                       ),
                                     ],
@@ -2220,18 +2757,21 @@ class _MonthlyReportTabState extends State<_MonthlyReportTab> {
                                     runSpacing: 4,
                                     children: [
                                       _stat('Haq turi', payLabel),
-                                      _stat('Keldi', r['daysPresent']),
-                                      _stat('Kelmadi', r['daysAbsent']),
-                                      _stat('Kech', r['daysLate']),
-                                      _stat('Erta ketdi', r['daysEarlyLeave']),
-                                      _stat('Soat', r['totalHours']),
-                                      _stat('Qo\'shimcha',
-                                          _hasOt(r) ? r['totalOvertimeHours'] : '-'),
+                                      _stat('Ish kuni', r['workingDays']),
+                                      _stat('Norma (soat)', r['normHours']),
+                                      if (base > 0) _stat('Stavka', r['hourlyRate']),
+                                      if ((r['overtimeHours']?.toString() ?? '0') != '0')
+                                        _stat('Qo\'shimcha soat', r['overtimeHours']),
+                                      if (base > 0) _stat('Qo\'shimcha haq', r['overtimePay']),
+                                      if (piece > 0) _stat('Ishbay haq', r['pieceTotal']),
+                                      if (avg.isNotEmpty) _stat('O\'rtacha stavka', r['avgHourlyRate']),
+                                      if (pending > 0)
+                                        _stat('Kutilayotgan kun', pending),
                                     ],
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
-                                    'Oylik: ${_fmtNum(base)}  •  Ishbay: ${_fmtNum(piece)}  •  Premiya: ${_fmtNum(bonus)}  •  Jarima: ${_fmtNum(penalty)}  •  Avans: ${_fmtNum(advance)}',
+                                    'Oylik: ${_fmtNum(base)}  •  Ishbay: ${_fmtNum(piece)}',
                                     style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                                   ),
                                   if (r['position'] != null || r['department'] != null)
@@ -2247,6 +2787,17 @@ class _MonthlyReportTabState extends State<_MonthlyReportTab> {
                       ),
                     ),
         ),
+        if (!_loading && _summary.isNotEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            color: AppColors.background,
+            child: Text(
+              'Jami ish haqi: ${_fmtNum(double.tryParse(_summary['totalPayroll']?.toString() ?? '0') ?? 0)} so\'m '
+              '(${_summary['headcount'] ?? 0} ta xodim)',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
       ],
     );
   }
