@@ -192,14 +192,14 @@ class _HomeShellState extends State<HomeShell> {
       entries.add(_NavEntry(NavItem(index: entries.length, icon: Icons.storefront, label: 'Dillerlar'), DealersScreen(refreshNotifier: refreshNotifier)));
     }
 
-    entries.add(_NavEntry(const NavItem(index: 9, icon: Icons.bar_chart, label: 'Hisobotlar'), ReportsScreen(refreshNotifier: refreshNotifier)));
-    entries.add(_NavEntry(const NavItem(index: 10, icon: Icons.notifications_active, label: 'Ogohlantirishlar'), AlertsScreen(refreshNotifier: refreshNotifier)));
+    entries.add(_NavEntry(NavItem(index: entries.length, icon: Icons.bar_chart, label: 'Hisobotlar'), ReportsScreen(refreshNotifier: refreshNotifier)));
+    entries.add(_NavEntry(NavItem(index: entries.length, icon: Icons.notifications_active, label: 'Ogohlantirishlar'), AlertsScreen(refreshNotifier: refreshNotifier)));
 
     if (role.canManageThresholds) {
-      entries.add(_NavEntry(const NavItem(index: 11, icon: Icons.tune, label: 'Kritik darajalar'), ThresholdsScreen(refreshNotifier: refreshNotifier)));
+      entries.add(_NavEntry(NavItem(index: entries.length, icon: Icons.tune, label: 'Kritik darajalar'), ThresholdsScreen(refreshNotifier: refreshNotifier)));
     }
     if (role.canManageUsers) {
-      entries.add(_NavEntry(const NavItem(index: 12, icon: Icons.people, label: 'Foydalanuvchilar'), UsersScreen(refreshNotifier: refreshNotifier)));
+      entries.add(_NavEntry(NavItem(index: entries.length, icon: Icons.people, label: 'Foydalanuvchilar'), UsersScreen(refreshNotifier: refreshNotifier)));
     }
     if (role.canViewHr) {
       entries.add(_NavEntry(NavItem(index: entries.length, icon: Icons.badge, label: 'Xodimlar'), HrScreen(refreshNotifier: refreshNotifier)));
